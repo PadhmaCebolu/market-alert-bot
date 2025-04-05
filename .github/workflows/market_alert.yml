@@ -24,12 +24,14 @@ jobs:
         pip install requests beautifulsoup4 selenium
 
     - name: Set up Chrome
+      id: setup-chrome
       uses: browser-actions/setup-chrome@latest
 
     - name: Set up ChromeDriver
       uses: nanasess/setup-chromedriver@v2
       with:
-        chromedriver-version: latest
+        chromedriver-version: ${{ steps.setup-chrome.outputs.chrome-version }}
+
 
     - name: Run market alert bot
       env:
