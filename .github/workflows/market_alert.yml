@@ -2,9 +2,9 @@ name: Market Alert Bot
 
 on:
   schedule:
-    - cron: '0 6 * * 1-5'    # 6 AM UTC (2 AM EDT, 1 AM EST) – adjust as needed
-    - cron: '16 16 * * 1-5'  # 12 PM EDT (16:00 UTC) – Midday Alert
-  workflow_dispatch:         # Allow manual run
+    - cron: '0 6 * * 1-5'    # 6 AM UTC
+    - cron: '16 16 * * 1-5'  # 12 PM UTC
+  workflow_dispatch:
 
 jobs:
   run-alert:
@@ -22,20 +22,19 @@ jobs:
     - name: Install dependencies
       run: pip install -r requirements.txt
 
-    - name: Set up Chrome
+    - name: Set up Chrome & ChromeDriver
       uses: browser-actions/setup-chrome@latest
-    
-    - name: Set up ChromeDriver
-      uses: browser-actions/setup-chromedriver@latest
-
       with:
-        chromedriver-version: ${{ steps.setup-chrome.outputs.chrome-version }}
-
+        chrome-version: stable
 
     - name: Run market alert bot
       env:
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
-        EMAIL_TO: ${{ secrets.EMAIL_TO }} 
         FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
-      run: python spx_premarket_alerts.py
+        EMAIL_TO: ${{ secrets.EMAIL_TO }}
+      run: |
+        echo "Checking Chrome version:"
+        google-chrome --version
+        echo "Launching Python script"
+        python spx_premarket_alerts.py
