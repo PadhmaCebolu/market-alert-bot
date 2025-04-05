@@ -310,7 +310,7 @@ def main():
 
     alert = []
     alert.append(f"📊 Pre-Market Alert for {today} 📊\n")
-    alert.append(f"🔹 SPY Price: {spx}\n🔺 VIX: {vix}\n📉 S&P 500 Futures (ES): {es}\n🏦 10-Year Treasury Yield: {tnx}%\n🧠 Consumer Confidence Index: {cci}\n")
+    alert.append(f"🔹 SPX Price: {spx}\n🔺 VIX: {vix}\n📉 S&P 500 Futures (ES): {es}\n🏦 10-Year Treasury Yield: {tnx}%\n🧠 Consumer Confidence Index: {cci}\n")
 
     alert.append("📰 Market Headlines:")
     alert.extend([f"- {line}" for line in headlines])
