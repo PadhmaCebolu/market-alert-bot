@@ -10,6 +10,8 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 from dotenv import load_dotenv
+import chromedriver_autoinstaller
+chromedriver_autoinstaller.install()
 
 load_dotenv()  # Load credentials from .env file if running locally
 
