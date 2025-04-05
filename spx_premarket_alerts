@@ -343,7 +343,7 @@ def main():
     print(full_message)
 
     # Send email (customize this call)
-    send_email(subject="📊 Pre-Market Alert", body=full_message, to_email="your_recipient@example.com")
+    send_email(subject="📊 Pre-Market Alert", body=full_message, to_email=os.getenv("EMAIL_TO"))
 
 if __name__ == "__main__":
     main()
