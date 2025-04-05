@@ -23,11 +23,11 @@ jobs:
       run: pip install -r requirements.txt
 
     - name: Set up Chrome
-      id: setup-chrome
       uses: browser-actions/setup-chrome@latest
-
+    
     - name: Set up ChromeDriver
-      uses: nanasess/setup-chromedriver@v2
+      uses: browser-actions/setup-chromedriver@latest
+
       with:
         chromedriver-version: ${{ steps.setup-chrome.outputs.chrome-version }}
 
