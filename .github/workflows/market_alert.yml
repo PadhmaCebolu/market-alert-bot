@@ -40,7 +40,7 @@ jobs:
         python spx_premarket_alerts.py
 
     - name: Upload CSV Log
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: market-log
         path: market_predictions.csv
