@@ -154,14 +154,16 @@ def calculate_vix_move(spx, vix, bias):
 
 # Logging function for pre-market predictions
 def log_premarket_prediction(date, spx, es, vix, sentiment_score, direction, move_pts):
-    log_file = "market_predictions.csv"
+    log_file = os.path.join(os.getcwd(), "market_predictions.csv")
     file_exists = os.path.isfile(log_file)
-    
+
     with open(log_file, mode='a', newline='', encoding='utf-8') as file:
         writer = csv.writer(file)
         if not file_exists:
             writer.writerow(["date", "spx", "es", "vix", "sentiment_score", "predicted_trend", "predicted_move_pts"])
         writer.writerow([date, spx, es, vix, sentiment_score, direction, move_pts])
+    print(f"📁 Logging to: {log_file}")  
+
 # =============================
 # 📧 Email Notification
 # =============================
@@ -222,6 +224,7 @@ def main():
 )
     # Send email (customize this call)
     send_email(subject="📊 Pre-Market Alert", body=full_message, to_email=os.getenv("EMAIL_TO"))
+    
 
 if __name__ == "__main__":
     main()
