@@ -10,25 +10,28 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
 from dotenv import load_dotenv
-import chromedriver_autoinstaller
-chromedriver_autoinstaller.install()
+import csv
+import datetime
 
-load_dotenv()  # Load credentials from .env file if running locally
+
+# Load environment variables
+load_dotenv()
 
 # =============================
-# 📌 Utility: Sentiment Tagger
+# 📌 Utility Functions
 # =============================
 
 def tag_sentiment(text):
     negative_keywords = {
         "crash": 5, "recession": 4, "tariff": 4, "rate hike": 3,
-        "selloff": 3, "inflation": 2, "conflict": 2, "drop": 2, "slide": 2
+        "selloff": 3, "inflation": 2, "conflict": 2, "drop": 2, "slide": 2,
+        "war": 5, "defaults": 3, "plunge": 3
     }
     positive_keywords = {
         "rally": 3, "gain": 2, "growth": 2, "beat": 2,
-        "optimism": 2, "cut rates": 3, "stimulus": 4
+        "optimism": 2, "cut rates": 3, "stimulus": 4,
+        "record high": 4, "jump": 2
     }
-
     text = text.lower()
     score = 0
     for word, weight in negative_keywords.items():
@@ -37,238 +40,128 @@ def tag_sentiment(text):
     for word, weight in positive_keywords.items():
         if word in text:
             score += weight
-
-    if score >= 3:
-        return "📈"
-    elif score <= -3:
-        return "📉"
-    else:
-        return "🔹"
-
-# =============================
-# 📌 Stock-Specific Tagger
-# =============================
-
-def is_stock_specific(text):
-    tickers = ["aapl", "googl", "msft", "amzn", "tsla", "nvda", "meta", "brk.a", "nflx", "pzza"]
-    text = text.lower()
-    return any(ticker in text for ticker in tickers)
-
-# =============================
-# 📌 Market-Relevant Filter
-# =============================
+    emoji = "📈" if score >= 3 else "📉" if score <= -3 else "🔹"
+    return emoji, score
 
 def is_market_relevant(text):
-    market_keywords = [
-        "fed", "tariff", "rate", "inflation", "yields", "bond", "treasury",
-        "earnings", "revenue", "forecast", "guidance", "stocks", "markets",
-        "rally", "selloff", "recession", "jobless", "cpi", "ppi", "gdp",
-        "volatility", "dow", "nasdaq", "s&p", "ecb", "china", "trade",
-        "consumer confidence", "cci"
-    ]
-    text = text.lower()
-    return any(keyword in text for keyword in market_keywords)
+    keywords = ["fed", "tariff", "rate", "inflation", "yields", "bond", "treasury", "earnings", "revenue", "stocks", "markets", "recession", "jobless", "cpi", "ppi", "gdp", "volatility"]
+    return any(k in text.lower() for k in keywords)
 
 # =============================
-# 📌 News Collectors
+# 📌 News Scrapers
 # =============================
 
-def get_mace_news():
+def scrape_headlines(url, selector, base_url=""):
     headlines = []
     try:
-        url = "https://macenews.com/"
-        options = Options()
-        options.add_argument("--headless")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
-        driver = webdriver.Chrome(options=options)
-        driver.get(url)
-        time.sleep(5)
-        elements = driver.find_elements(By.CLASS_NAME, "elementor-heading-title")
-        for e in elements[:10]:
-            text = e.text.strip()
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(url, headers=headers)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        for el in soup.select(selector)[:10]:
+            text = el.get_text(strip=True)
+            link = el.get("href", "")
             if text and is_market_relevant(text):
-                sentiment = tag_sentiment(text)
-                tag = "📊 [STOCK] " if is_stock_specific(text) else ""
-                headlines.append(f"{sentiment} {tag}{text} - {url}")
-        driver.quit()
+                emoji, score = tag_sentiment(text)
+                full_link = f"{base_url}{link}" if link.startswith("/") else link
+                headlines.append((emoji, score, f"{emoji} {text} - {full_link}"))
     except Exception as e:
-        print("Mace error:", e)
+        print(f"⚠️ Error scraping {url}:", e)
     return headlines
 
-def get_cnbc_news():
-    headlines = []
-    try:
-        url = "https://www.cnbc.com/world/?region=world"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        elements = soup.select("a.Card-title")
-        for e in elements[:10]:
-            text = e.get_text(strip=True)
-            link = e.get("href")
-            if text and is_market_relevant(text):
-                sentiment = tag_sentiment(text)
-                tag = "📊 [STOCK] " if is_stock_specific(text) else ""
-                headlines.append(f"{sentiment} {tag}{text} - {link}")
-    except Exception as e:
-        print("CNBC error:", e)
-    return headlines
-
-def get_reuters_news():
-    headlines = []
-    try:
-        url = "https://www.reuters.com/"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        elements = soup.select("a[data-testid='Heading']")
-        for e in elements[:10]:
-            text = e.get_text(strip=True)
-            link = e.get("href")
-            if text and is_market_relevant(text):
-                full_link = f"https://www.reuters.com{link}" if link.startswith("/") else link
-                sentiment = tag_sentiment(text)
-                tag = "📊 [STOCK] " if is_stock_specific(text) else ""
-                headlines.append(f"{sentiment} {tag}{text} - {full_link}")
-    except Exception as e:
-        print("Reuters error:", e)
-    return headlines
+def get_all_market_news():
+    return (
+        scrape_headlines("https://macenews.com/", ".elementor-heading-title") +
+        scrape_headlines("https://www.cnbc.com/world/?region=world", "a.Card-title") +
+        scrape_headlines("https://www.reuters.com/", "a[data-testid='Heading']", base_url="https://www.reuters.com")
+    )
 
 # =============================
-# 📌 Economic Calendar Events
+# 📌 Market Data
 # =============================
-
-def get_today_economic_events():
-    events = []
-    try:
-        url = "https://www.investing.com/economic-calendar/"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.content, "html.parser")
-        rows = soup.select("tr.js-event-item")
-
-        today_str = datetime.date.today().strftime("%b %d, %Y")
-
-        for row in rows:
-            time_cell = row.select_one("td.time")
-            event_cell = row.select_one("td.event")
-            impact_cell = row.select_one("td.sentiment")
-            country_cell = row.select_one("td.flagCur")
-
-            if all([time_cell, event_cell, impact_cell, country_cell]):
-                impact = len(impact_cell.select("i.grayFullBullishIcon"))
-                if impact >= 2:  # medium or high impact
-                    event_text = event_cell.get_text(strip=True)
-                    country = country_cell.get("title", "")
-                    time_text = time_cell.get_text(strip=True)
-                    events.append(f"📅 {time_text} {event_text} ({country}, {impact}★)")
-    except Exception as e:
-        print("⚠️ Error fetching economic calendar:", e)
-    return events
-
-# =============================
-# 📌 Market Data Fetchers
-# =============================
-
-def get_api_key(filename):
-    try:
-        with open(f"API Keys/{filename}", "r") as file:
-            return file.read().strip()
-    except FileNotFoundError:
-        print(f"❌ Error: {filename} file not found.")
-        return None
 
 def get_price_from_investing(url):
     try:
         options = Options()
         options.add_argument("--headless")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
         driver = webdriver.Chrome(options=options)
         driver.get(url)
-        time.sleep(5)
-        price_element = driver.find_element(By.CSS_SELECTOR, '[data-test="instrument-price-last"]')
-        price = float(price_element.text.replace(",", ""))
+        time.sleep(4)
+        price = driver.find_element(By.CSS_SELECTOR, '[data-test="instrument-price-last"]').text.replace(",", "")
         driver.quit()
-        return price
+        return float(price)
     except Exception as e:
-        print(f"⚠️ Error loading {url}: {e}")
+        print(f"⚠️ Error retrieving price from {url}:", e)
         return "N/A"
 
-def get_spx_index():
+def get_spx():
     return get_price_from_investing("https://www.investing.com/indices/us-spx-500")
-
 
 def get_vix():
     return get_price_from_investing("https://www.investing.com/indices/volatility-s-p-500")
 
-def get_es_futures():
+def get_es():
     return get_price_from_investing("https://www.investing.com/indices/us-spx-500-futures")
 
 # =============================
-# 📌 Common FRED Series Fetcher
+# 📌 Analysis & Bias
 # =============================
 
-def get_fred_series_value(series_id):
-    fred_api_key = os.getenv("FRED_API_KEY")
-    if not fred_api_key:
-        return "N/A"
-    url = f"https://api.stlouisfed.org/fred/series/observations?series_id={series_id}&api_key={fred_api_key}&file_type=json"
+def estimate_direction(spx, es, sentiment_score, vix):
+    score = 0
+    reasons = []
+    gap = es - spx if isinstance(spx, float) and isinstance(es, float) else 0
+
+    if gap > 10:
+        score += 1
+        reasons.append("ES futures lead SPX → bullish")
+    elif gap < -10:
+        score -= 1
+        reasons.append("ES futures lag SPX → bearish")
+
+    if sentiment_score >= 3:
+        score += 1
+        reasons.append("Positive news bias")
+    elif sentiment_score <= -3:
+        score -= 1
+        reasons.append("Negative news bias")
+
+    if isinstance(vix, float) and vix > 30:
+        score -= 1
+        reasons.append("High VIX (>30) → bearish weight")
+
+    if score >= 1:
+        return "📈 Bullish", reasons
+    elif score <= -1:
+        return "📉 Bearish", reasons
+    else:
+        return "⚖️ Neutral", reasons
+
+def calculate_vix_move(spx, vix, bias):
     try:
-        response = requests.get(url)
-        data = response.json()
-        return float(data["observations"][-1]["value"])
-    except:
-        return "N/A"
+        if isinstance(spx, float) and isinstance(vix, float):
+            move = (spx * vix / 100) / (252 ** 0.5)
+            if bias == "📉 Bearish":
+                move_points = -round(move, 2)
+                return move_points, f"{move_points} pts drop expected"
+            elif bias == "📈 Bullish":
+                move_points = round(move, 2)
+                return move_points, f"{move_points} pts rise expected"
+            else:
+                return round(move, 2), f"±{round(move, 2)} pts (~{round((move / spx) * 100, 2)}%)"
+    except Exception as e:
+        print(f"⚠️ Error calculating VIX move: {e}")
+    return "N/A", "N/A"
 
-# =============================
-# 📌 Fetch Live CCI from FRED
-# =============================
-
-def get_consumer_confidence_index():
-    return get_fred_series_value("CSCICP03USM665S")
-# =============================
-# 📌 Fetch Treasury Yield from FRED
-# =============================
-
-def get_treasury_yield():
-    return get_fred_series_value("DGS10")
-
-# =============================
-# 📌 Main Alert Function
-# =============================
-
-def get_all_market_news():
-    headlines = []
-    headlines.extend(get_mace_news())
-    headlines.extend(get_cnbc_news())
-    headlines.extend(get_reuters_news())
-    return headlines
-
-# =============================
-# 📌 Economic Event Sentiment Summary
-# =============================
-
-def summarize_economic_sentiment(events):
-    summary = []
-    high_impact = [ev for ev in events if "3★" in ev]
-
-    if any("jobless" in ev.lower() or "cpi" in ev.lower() for ev in high_impact):
-        summary.append("📉 Jobless claims, CPI suggest downside risk")
-    if any("services pmi" in ev.lower() or "ism" in ev.lower() for ev in high_impact):
-        summary.append("📊 Services PMI could support a rebound")
-    if any("ecb" in ev.lower() or "fed" in ev.lower() for ev in high_impact):
-        summary.append("🏦 ECB & Fed events add policy uncertainty")
-    if any("consumer confidence" in ev.lower() or "cci" in ev.lower() for ev in high_impact):
-        summary.append("📊 Consumer confidence data may influence sentiment")
-
-    if not summary:
-        summary.append("🔍 No high-impact events strongly skewing sentiment")
-
-    return summary
-
-
+# Logging function for pre-market predictions
+def log_premarket_prediction(date, spx, es, vix, sentiment_score, direction, move_pts):
+    log_file = "market_predictions.csv"
+    file_exists = os.path.isfile(log_file)
+    
+    with open(log_file, mode='a', newline='', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        if not file_exists:
+            writer.writerow(["date", "spx", "es", "vix", "sentiment_score", "predicted_trend", "predicted_move_pts"])
+        writer.writerow([date, spx, es, vix, sentiment_score, direction, move_pts])
 # =============================
 # 📧 Email Notification
 # =============================
@@ -300,50 +193,33 @@ def send_email(subject, body, to_email):
 
 def main():
     today = datetime.date.today()
-    spx = get_spx_index()
-    vix = get_vix()
-    es = get_es_futures()
-    tnx = get_treasury_yield()
-    cci = get_consumer_confidence_index()
-    headlines = get_all_market_news()
-    econ_events = get_today_economic_events()
+    spx, vix, es = get_spx(), get_vix(), get_es()
+    news = get_all_market_news()
+    sentiment_score = sum(score for _, score, _ in news)
+    direction, reasons = estimate_direction(spx, es, sentiment_score, vix)
+    move_pts, move_msg = calculate_vix_move(spx, vix, direction)
 
-    alert = []
-    alert.append(f"📊 Pre-Market Alert for {today} 📊\n")
-    alert.append(f"🔹 SPX Price: {spx}\n🔺 VIX: {vix}\n📉 S&P 500 Futures (ES): {es}\n🏦 10-Year Treasury Yield: {tnx}%\n🧠 Consumer Confidence Index: {cci}\n")
 
-    alert.append("📰 Market Headlines:")
-    alert.extend([f"- {line}" for line in headlines])
+    alert = [
+    f"📊 Pre-Market Alert for {today}",
+    f"🔹 SPX: {spx}  🔺 VIX: {vix}  📉 ES: {es}",
+    f"\n📰 Headlines:", *[f"- {h}" for _, _, h in news],
+    f"\n📊 Market Bias: {direction}", *[f"- {r}" for r in reasons],
+    f"\n📉 VIX-Derived Expected Move: {move_msg}"
+]
 
-    alert.append("\n📅 Key Economic Events Today:")
-    if econ_events:
-        high_impact_events = [ev for ev in econ_events if "3★" in ev]
-        if high_impact_events:
-            alert.extend([f"- {ev}" for ev in high_impact_events])
-        else:
-            alert.append("- No high-impact events today.")
-    else:
-        alert.append("- No major events today.")
 
-    alert.append("\n📌 Economic Sentiment Summary:")
-    calendar_sentiment = summarize_economic_sentiment(econ_events)
-    alert.extend(calendar_sentiment)
+    print("\n".join(alert))
 
-    alert.append("\n📡 Market Outlook:")
-    if isinstance(vix, float) and vix > 25:
-        alert.append("🔻 High Volatility (VIX > 25)")
-    if isinstance(es, float) and isinstance(spx, float):
-        diff = es - spx
-        if abs(diff) > 100:
-            direction = "rise" if diff > 0 else "drop"
-            alert.append(f"⚠️ Significant ES {direction}: {abs(diff):.1f} pts compared to SPX")
-    if isinstance(tnx, float) and tnx > 4:
-        alert.append("💡 Elevated Treasury Yield (> 4%) suggests inflation concerns")
-    if isinstance(cci, float) and cci < 100:
-        alert.append("😟 Weak Consumer Confidence (CCI < 100)")
-    full_message = "\n".join(alert)
-    print(full_message)
-
+    log_premarket_prediction(
+    date=today,
+    spx=spx,
+    es=es,
+    vix=vix,
+    sentiment_score=sentiment_score,
+    direction=direction,
+    move_pts=move_pts
+)
     # Send email (customize this call)
     send_email(subject="📊 Pre-Market Alert", body=full_message, to_email=os.getenv("EMAIL_TO"))
 
