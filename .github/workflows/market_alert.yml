@@ -38,7 +38,8 @@ jobs:
         google-chrome --version
         echo "Launching Python script"
         python spx_premarket_alerts.py
-    - name: Upload CSV Log
+    - name: Upload CSV Log if exists
+      if: always()
       uses: actions/upload-artifact@v3
       with:
         name: market-log
