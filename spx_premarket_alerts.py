@@ -209,7 +209,7 @@ def main():
 ]
 
 
-    print("\n".join(alert))
+    full_message = ("\n".join(alert))
 
     log_premarket_prediction(
     date=today,
