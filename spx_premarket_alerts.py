@@ -178,7 +178,7 @@ def send_email(subject, body, to_email):
     message["From"] = from_email
     message["To"] = to_email
     message["Subject"] = subject
-    message.attach(MIMEText(body, "plain"))
+    message.attach(MIMEText(body, "html"))
 
     try:
         with smtplib.SMTP(smtp_server, port) as server:
@@ -202,16 +202,39 @@ def main():
     move_pts, move_msg = calculate_vix_move(spx, vix, direction)
 
 
-    alert = [
-    f"📊 Pre-Market Alert for {today}",
-    f"🔹 SPX: {spx}  🔺 VIX: {vix}  📉 ES: {es}",
-    f"\n📰 Headlines:", *[f"- {h}" for _, _, h in news],
-    f"\n📊 Market Bias: {direction}", *[f"- {r}" for r in reasons],
-    f"\n📉 VIX-Derived Expected Move: {move_msg}"
-]
+    # Create an HTML formatted email
+html_message = f"""
+<html>
+  <body style="font-family:Arial, sans-serif; line-height:1.6;">
+    <h2 style="color:#0a66c2;">📊 Pre-Market Alert for {today}</h2>
+    
+    <p>
+      <b>🔹 SPX:</b> {spx} &nbsp;&nbsp;
+      <b>🔺 VIX:</b> {vix} &nbsp;&nbsp;
+      <b>📉 ES:</b> {es}
+    </p>
+
+    <h3>📰 Headlines</h3>
+    <ul>
+      {''.join(f"<li>{h}</li>" for _, _, h in news)}
+    </ul>
+
+    <h3 style="color:#dc3545;">📊 Market Bias: <span style="font-size: 1.2em;">{direction}</span></h3>
+    <ul>
+      {''.join(f"<li>{r}</li>" for r in reasons)}
+    </ul>
+
+    <h3 style="color:#800080;">📉 VIX-Derived Expected Move:</h3>
+    <p style="font-size:1.1em; font-weight:bold;">{move_msg}</p>
+
+    <br/>
+    <p style="font-size: 0.9em; color: gray;">⏰ Generated on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+  </body>
+</html>
+"""
 
 
-    full_message = ("\n".join(alert))
+    
 
     log_premarket_prediction(
     date=today,
@@ -223,7 +246,7 @@ def main():
     move_pts=move_pts
 )
     # Send email (customize this call)
-    send_email(subject="📊 Pre-Market Alert", body=full_message, to_email=os.getenv("EMAIL_TO"))
+    send_email(subject="📊 Pre-Market Alert", body=html_message, to_email=os.getenv("EMAIL_TO"))
     
 
 if __name__ == "__main__":
