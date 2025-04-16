@@ -201,53 +201,49 @@ def main():
     direction, reasons = estimate_direction(spx, es, sentiment_score, vix)
     move_pts, move_msg = calculate_vix_move(spx, vix, direction)
 
+    ##Email body
+    html_message = f"""
+    <html>
+      <body style="font-family:Arial, sans-serif; line-height:1.6;">
+        <h2 style="color:#0a66c2;">📊 Pre-Market Alert for {today}</h2>
+        
+        <p>
+          <b>🔹 SPX:</b> {spx} &nbsp;&nbsp;
+          <b>🔺 VIX:</b> {vix} &nbsp;&nbsp;
+          <b>📉 ES:</b> {es}
+        </p>
 
-    # Create an HTML formatted email
-html_message = f"""
-<html>
-  <body style="font-family:Arial, sans-serif; line-height:1.6;">
-    <h2 style="color:#0a66c2;">📊 Pre-Market Alert for {today}</h2>
-    
-    <p>
-      <b>🔹 SPX:</b> {spx} &nbsp;&nbsp;
-      <b>🔺 VIX:</b> {vix} &nbsp;&nbsp;
-      <b>📉 ES:</b> {es}
-    </p>
+        <h3>📰 Headlines</h3>
+        <ul>
+          {''.join(f"<li>{h}</li>" for _, _, h in news)}
+        </ul>
 
-    <h3>📰 Headlines</h3>
-    <ul>
-      {''.join(f"<li>{h}</li>" for _, _, h in news)}
-    </ul>
+        <h3 style="color:#dc3545;">📊 Market Bias: <span style="font-size: 1.2em;">{direction}</span></h3>
+        <ul>
+          {''.join(f"<li>{r}</li>" for r in reasons)}
+        </ul>
 
-    <h3 style="color:#dc3545;">📊 Market Bias: <span style="font-size: 1.2em;">{direction}</span></h3>
-    <ul>
-      {''.join(f"<li>{r}</li>" for r in reasons)}
-    </ul>
+        <h3 style="color:#800080;">📉 VIX-Derived Expected Move:</h3>
+        <p style="font-size:1.1em; font-weight:bold;">{move_msg}</p>
 
-    <h3 style="color:#800080;">📉 VIX-Derived Expected Move:</h3>
-    <p style="font-size:1.1em; font-weight:bold;">{move_msg}</p>
-
-    <br/>
-    <p style="font-size: 0.9em; color: gray;">⏰ Generated on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-  </body>
-</html>
-"""
-
-
-    
+        <br/>
+        <p style="font-size: 0.9em; color: gray;">⏰ Generated on {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+      </body>
+    </html>
+    """
 
     log_premarket_prediction(
-    date=today,
-    spx=spx,
-    es=es,
-    vix=vix,
-    sentiment_score=sentiment_score,
-    direction=direction,
-    move_pts=move_pts
-)
-    # Send email (customize this call)
+        date=today,
+        spx=spx,
+        es=es,
+        vix=vix,
+        sentiment_score=sentiment_score,
+        direction=direction,
+        move_pts=move_pts
+    )
+
     send_email(subject="📊 Pre-Market Alert", body=html_message, to_email=os.getenv("EMAIL_TO"))
-    
+
 
 if __name__ == "__main__":
     main()
