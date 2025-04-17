@@ -23,7 +23,8 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def classify_headlines_openai_bulk(headlines):
     try:
-        response = client.chat.completions.create(
+        response = openai.ChatCompletion.create(
+
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", "content": "You're a financial sentiment classifier. For each headline, respond with just 📈, 📉, or 🔹."},
