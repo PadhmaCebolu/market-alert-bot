@@ -21,24 +21,23 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 # 📋 Utility Functions
 # =============================
 
-def classify_headlines_openai(headlines):
-    messages = [
-        {"role": "system", "content": "You are a financial news sentiment classifier. For each headline, respond only with 'positive', 'negative', or 'neutral'."},
-        {"role": "user", "content": "\n".join([f"{i+1}. {hl}" for i, hl in enumerate(headlines)])}
-    ]
-
+def classify_headlines_openai_bulk(headlines):
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=messages,
-            temperature=0
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": "You're a financial sentiment classifier. For each headline, respond with just 📈, 📉, or 🔹."},
+                {"role": "user", "content": "\n".join(headlines)}
+            ],
+            max_tokens=50
         )
-        raw_output = response.choices[0].message.content.strip().splitlines()
-        return list(zip(headlines, raw_output))
+        result_text = response.choices[0].message.content.strip()
+        sentiments = result_text.splitlines()
+        return sentiments
     except Exception as e:
-        print(f"❌ OpenAI classification failed: {e}")
-        return []
-
+        print("❌ OpenAI classification failed:", e)
+        return ["🔹"] * len(headlines)
+        
 def is_market_relevant(text):
     keywords = ["fed", "tariff", "rate", "inflation", "yields", "bond", "treasury", "earnings", "revenue", "stocks", "markets", "recession", "jobless", "cpi", "ppi", "gdp", "volatility"]
     return any(k in text.lower() for k in keywords)
