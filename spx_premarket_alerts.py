@@ -23,11 +23,10 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def classify_headlines_openai_bulk(headlines):
     try:
-        response = openai.ChatCompletion.create(
-
+        response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "You're a financial sentiment classifier. For each headline, respond with just 📈, 📉, or 🔹."},
+                {"role": "system", "content": "You're a financial sentiment classifier. For each headline, respond with just 📈, 📉, or 🔹. Give one per line in the same order."},
                 {"role": "user", "content": "\n".join(headlines)}
             ],
             max_tokens=50
@@ -38,10 +37,7 @@ def classify_headlines_openai_bulk(headlines):
     except Exception as e:
         print("❌ OpenAI classification failed:", e)
         return ["🔹"] * len(headlines)
-        
-def is_market_relevant(text):
-    keywords = ["fed", "tariff", "rate", "inflation", "yields", "bond", "treasury", "earnings", "revenue", "stocks", "markets", "recession", "jobless", "cpi", "ppi", "gdp", "volatility"]
-    return any(k in text.lower() for k in keywords)
+
 
 # =============================
 # 📋 News Scrapers
@@ -70,15 +66,15 @@ def get_all_market_news():
         scrape_headlines("https://www.reuters.com/", "a[data-testid='Heading']", base_url="https://www.reuters.com")
     )
 
-    classified = classify_headlines_openai(headlines_raw)
+    classified = classify_headlines_openai_bulk(headlines_raw)
+
     enhanced_news = []
-    for original, sentiment in classified:
-        sentiment = sentiment.lower()
-        score = {"positive": 3, "negative": -3, "neutral": 0}.get(sentiment, 0)
-        emoji = "📈" if score > 0 else "📉" if score < 0 else "🔹"
-        enhanced_news.append((emoji, score, f"{emoji} {original}"))
+    for original, sentiment in zip(headlines_raw, classified):
+        score = {"📈": 3, "📉": -3, "🔹": 0}.get(sentiment, 0)
+        enhanced_news.append((sentiment, score, f"{sentiment} {original}"))
 
     return enhanced_news
+
 
 # =============================
 # 📋 Market Data
