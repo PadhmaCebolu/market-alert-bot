@@ -188,13 +188,46 @@ def log_premarket_prediction(date, spx, es, vix, sentiment_score, direction, mov
 # 📧 Email Notifier
 # =============================
 
-def send_email(subject, body, to_email):
+def send_email(subject, body_text, to_email):
     try:
-        message = MIMEMultipart()
+        message = MIMEMultipart("alternative")
         message["From"] = os.getenv("EMAIL_USER")
         message["To"] = to_email
         message["Subject"] = subject
-        message.attach(MIMEText(body, "plain"))
+
+        # HTML Template
+        html = f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+            <h2 style="color: #0d6efd;">📊 Pre-Market Alert for {datetime.date.today()}</h2>
+            <p>
+                <strong>🔹 SPX:</strong> {spx} &nbsp;&nbsp;
+                <strong>🔺 VIX:</strong> {vix} &nbsp;&nbsp;
+                <strong>📉 ES:</strong> {es}
+            </p>
+
+            <h3>📰 Headlines:</h3>
+            <ul>
+                {"".join(f"<li>{h.split()[0]} {h.split(' ', 1)[1]}</li>" for _, _, h in news)}
+            </ul>
+
+            <h3>📊 Market Bias: {direction}</h3>
+            <ul>
+                {"".join(f"<li>{r}</li>" for r in reasons)}
+            </ul>
+
+            <p><strong>📉 Expected Move:</strong> {move_msg}</p>
+            <br>
+            <p style="font-size: 0.9em; color: #888;">Generated automatically · CDUS Trading Insights</p>
+        </body>
+        </html>
+        """
+
+        part1 = MIMEText(body_text, "plain")
+        part2 = MIMEText(html, "html")
+
+        message.attach(part1)
+        message.attach(part2)
 
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
