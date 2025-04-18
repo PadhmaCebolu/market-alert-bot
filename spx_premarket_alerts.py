@@ -132,12 +132,13 @@ def estimate_direction(spx, es, sentiment_score, vix):
         score -= 1
         reasons.append("High VIX (>30) → bearish weight")
 
-    if score >= 1:
+    # 📌 Enforce binary direction — resolve ties toward strongest sentiment
+    if score >= 0:
+        reasons.append("Neutral bias overridden → forced Bullish")
         return "📈 Bullish", reasons
-    elif score <= -1:
-        return "📉 Bearish", reasons
     else:
-        return "⚖️ Neutral", reasons
+        reasons.append("Neutral bias overridden → forced Bearish")
+        return "📉 Bearish", reasons
 
 
 def get_expected_move_chameleon():
