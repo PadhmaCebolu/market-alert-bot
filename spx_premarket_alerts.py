@@ -139,8 +139,6 @@ def estimate_direction(spx, es, sentiment_score, vix):
     else:
         return "⚖️ Neutral", reasons
 
-with open("API Keys/apikey_finnhub.txt", "r") as f:
-    finnhub_api_key = f.read().strip()
 
 def get_expected_move_chameleon():
     try:
