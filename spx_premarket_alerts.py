@@ -230,7 +230,7 @@ def main():
         f"🔹 SPX: {spx}  🔺 VIX: {vix}  📉 ES: {es}",
         *headlines_section,
         f"\n📊 Market Bias: {direction}", *[f"- {r}" for r in reasons],
-        f"\n📉 VIX-Derived Expected Move: {move_msg}"
+        #f"\n📉 VIX-Derived Expected Move: {move_msg}"
     ]
 
     full_message = "\n".join(alert)
