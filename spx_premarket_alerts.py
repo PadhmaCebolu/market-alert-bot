@@ -38,7 +38,9 @@ def classify_headlines_openai_bulk(headlines):
         print("❌ OpenAI classification failed:", e)
         return ["🔹"] * len(headlines)
 
-
+def is_market_relevant(text):
+    keywords = ["fed", "tariff", "rate", "inflation", "yields", "bond", "treasury", "earnings", "revenue", "stocks", "markets", "recession", "jobless", "cpi", "ppi", "gdp", "volatility"]
+    return any(k in text.lower() for k in keywords)
 # =============================
 # 📋 News Scrapers
 # =============================
@@ -137,15 +139,38 @@ def estimate_direction(spx, es, sentiment_score, vix):
     else:
         return "⚖️ Neutral", reasons
 
-def calculate_vix_move(spx, vix, bias):
+with open("API Keys/apikey_finnhub.txt", "r") as f:
+    finnhub_api_key = f.read().strip()
+
+def get_expected_move_chameleon():
     try:
-        if isinstance(spx, float) and isinstance(vix, float):
-            move = (spx * vix / 100) / (252 ** 0.5)
-            move_points = round(move, 2)
-            return (-move_points if bias == "📉 Bearish" else move_points), f"{move_points} pts {'drop' if bias == '📉 Bearish' else 'rise'} expected"
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+        driver = webdriver.Chrome(options=options)
+
+        url = "https://marketchameleon.com/Overview/SPY/Options/"
+        driver.get(url)
+        time.sleep(6)
+
+        # Find the expected move value
+        elements = driver.find_elements(By.XPATH, "//div[contains(text(), 'Expected Move') or contains(text(), 'expected move')]")
+        for el in elements:
+            parent = el.find_element(By.XPATH, "..")
+            text = parent.text
+            if "Expected Move" in text:
+                driver.quit()
+                # Extract numeric value (e.g., "$5.21" → 5.21)
+                import re
+                match = re.search(r"\$([\d.]+)", text)
+                move_value = float(match.group(1)) if match else "N/A"
+                return move_value, f"{move_value} pts expected move"
+        
+        driver.quit()
+        return "N/A", "Expected move not found"
     except Exception as e:
-        print(f"⚠️ Error calculating VIX move: {e}")
-    return "N/A", "N/A"
+        return "N/A", f"❌ Error fetching expected move: {e}"
 
 # =============================
 # 📅 Logging
@@ -191,20 +216,32 @@ def main():
     news = get_all_market_news()
     sentiment_score = sum(score for _, score, _ in news)
     direction, reasons = estimate_direction(spx, es, sentiment_score, vix)
-    move_pts, move_msg = calculate_vix_move(spx, vix, direction)
+    move_pts, move_msg = get_expected_move_chameleon()
+
+
+
+
+    headlines_section = ["\n📰 Headlines:"]
+    if news:
+        headlines_section.extend([f"- {h}" for _, _, h in news])
+    else:
+        headlines_section.append("No headlines available or classification failed.")
 
     alert = [
         f"📊 Pre-Market Alert for {today}",
         f"🔹 SPX: {spx}  🔺 VIX: {vix}  📉 ES: {es}",
-        f"\n📰 Headlines:", *[f"- {h}" for _, _, h in news],
+        *headlines_section,
         f"\n📊 Market Bias: {direction}", *[f"- {r}" for r in reasons],
         f"\n📉 VIX-Derived Expected Move: {move_msg}"
     ]
 
     full_message = "\n".join(alert)
     print(full_message)
+    #debug_finnhub_response(finnhub_api_key)
 
     log_premarket_prediction(today, spx, es, vix, sentiment_score, direction, move_pts)
+
+
     send_email("📊 Pre-Market Alert", full_message, os.getenv("EMAIL_TO"))
 
 if __name__ == "__main__":
