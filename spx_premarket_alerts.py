@@ -263,7 +263,8 @@ def main():
     #print(f"\n📉 Expected Move: {move_msg}")
 
     # 6. Log results to CSV
-    log_premarket_prediction(today, spx, es, vix, sentiment_score, direction)
+    log_premarket_prediction(today, spx, es, vix, sentiment_score, direction, move_pts="N/A")
+
 
     # 7. Send styled email
     send_email(
