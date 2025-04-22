@@ -62,13 +62,46 @@ def scrape_headlines(url, selector, base_url=""):
         print(f"⚠️ Error scraping {url}:", e)
     return headlines
 
-def get_all_market_news():
-    headlines_raw = (
-        scrape_headlines("https://macenews.com/", ".elementor-heading-title") +
-        scrape_headlines("https://www.cnbc.com/world/?region=world", "a.Card-title") +
-        scrape_headlines("https://www.reuters.com/", "a[data-testid='Heading']", base_url="https://www.reuters.com")
-    )
+def get_all_market_news(finnhub_api_key, marketaux_api_key):
+    headlines_raw = []
 
+    # 📰 1. Macenews, CNBC, Reuters (Web scraping)
+    #headlines_raw += scrape_headlines("https://macenews.com/", ".elementor-heading-title")
+    headlines_raw += scrape_headlines("https://www.cnbc.com/world/?region=world", "a.Card-title")
+    #headlines_raw += scrape_headlines("https://www.reuters.com/", "a[data-testid='Heading']", base_url="https://www.reuters.com")
+
+    # 📰 2. Finnhub News
+    def fetch_finnhub_news():
+        url = f"https://finnhub.io/api/v1/news?category=general&token={finnhub_api_key}"
+        try:
+            response = requests.get(url).json()
+            for item in response[:10]:
+                title = item.get("headline", "")
+                url = item.get("url", "")
+                if title:
+                    headlines_raw.append(f"{title} - {url}")
+        except Exception as e:
+            print("❌ Finnhub news fetch failed:", e)
+
+    # 📰 3. Marketaux News
+    def fetch_marketaux_news():
+        url = f"https://api.marketaux.com/v1/news/all?symbols=SPY&filter_entities=true&language=en&api_token={marketaux_api_key}"
+        try:
+            response = requests.get(url).json()
+            for article in response.get("data", [])[:10]:
+                title = article.get("title", "")
+                url = article.get("url", "")
+                if title:
+                    headlines_raw.append(f"{title} - {url}")
+        except Exception as e:
+            print("❌ Marketaux news fetch failed:", e)
+
+    # Fetch from APIs
+    fetch_finnhub_news()
+    fetch_marketaux_news()
+
+    # Filter and classify
+    headlines_raw = [h for h in headlines_raw if is_market_relevant(h)]
     classified = classify_headlines_openai_bulk(headlines_raw)
 
     enhanced_news = []
@@ -87,6 +120,9 @@ def get_price_from_investing(url):
     try:
         options = Options()
         options.add_argument("--headless")
+        options.add_argument("--log-level=3")  # Suppress USB/logging warnings
+        options.add_experimental_option("excludeSwitches", ["enable-logging"])  # Optional extra suppressor
+
         driver = webdriver.Chrome(options=options)
         driver.get(url)
         time.sleep(4)
@@ -238,7 +274,7 @@ def main():
     es = get_es()
 
     # 2. Scrape and classify headlines
-    news = get_all_market_news()
+    news = get_all_market_news(finnhub_api_key, marketaux_api_key)
     sentiment_score = sum(score for _, score, _ in news)
 
     # 3. Market bias and direction
