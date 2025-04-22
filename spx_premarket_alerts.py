@@ -17,6 +17,8 @@ import pytz
 # Load environment variables
 load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
+finnhub_api_key = os.getenv("FINNHUB_API_KEY")
+marketaux_api_key = os.getenv("MARKETAUX_API_KEY")
 
 # =============================
 # 📋 Utility Functions
