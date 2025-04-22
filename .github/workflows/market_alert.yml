@@ -33,6 +33,7 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+          MARKETAUX_API_KEY: ${{ secrets.MARKETAUX_API_KEY }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
         run: python spx_premarket_alerts.py
 
