@@ -23,3 +23,4 @@ date,spx,es,vix,sentiment_score,predicted_trend,predicted_move_pts
 2025-04-29,5528.75,N/A,25.27,-9,📉 Bearish,N/A
 2025-04-29,5545.34,5575.75,24.58,0,📈 Bullish,N/A
 2025-04-30,5560.83,5565.5,24.93,-6,📉 Bearish,N/A
+2025-04-30,5503.38,5534.75,25.62,3,📈 Bullish,N/A
