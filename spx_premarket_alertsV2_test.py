@@ -320,7 +320,28 @@ def main():
     print(f"SPX: {spx}, ES: {es}, VIX: {vix}")
     print(f"📈 Implied Move (SPY ATM): {implied_move}")
     print(f"Sentiment Score: {sentiment_score}")
-    print("📉 Rule-based Bias:", rule_based_market_bias(sentiment_score, vix, es, spx))
+
+    direction = rule_based_market_bias(sentiment_score, vix, es, spx)
+    print("📉 Rule-based Bias:", direction)
+
+    # Define reasons for email body
+    reasons = []
+    if sentiment_score > 0: reasons.append("Positive sentiment score")
+    if es > spx: reasons.append("ES futures are higher than SPX")
+    if vix < 18: reasons.append("VIX is below 18 (low fear)")
+
+    # Send email
+    send_email(
+        subject=f"📊 SPX Pre-Market Outlook – {today}",
+        spx=spx,
+        vix=vix,
+        es=es,
+        news=[(score, 0, headline) for score, headline in news],
+        direction=direction,
+        reasons=reasons,
+        move_msg=implied_move,
+        to_email=EMAIL_TO
+    )
 
     market_data_path = os.path.join(DOWNLOAD_DIR, "market_features.csv")
     if os.path.exists(market_data_path):
