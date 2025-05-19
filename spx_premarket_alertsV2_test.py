@@ -30,15 +30,11 @@ PASSWORD = os.getenv("MC_PASSWORD")
 EMAIL_TO = os.getenv("EMAIL_TO")
 
 # Load API Keys
-with open("API Keys/apikey_openai.txt", "r") as f:
-    openai.api_key = f.readline().strip()
-with open("API Keys/apikey_finnhub.txt", "r") as f:
-    finnhub_api_key = f.readline().strip()
-with open("API Keys/apikey_marketaux.txt", "r") as f:
-    marketaux_api_key = f.readline().strip()
-with open("API Keys/apikey_fred.txt", "r") as f:
-    fred_api_key = f.readline().strip()
-fred = Fred(api_key=fred_api_key)
+load_dotenv()
+openai.api_key = os.getenv("OPENAI_API_KEY")
+finnhub_api_key = os.getenv("FINNHUB_API_KEY")
+marketaux_api_key = os.getenv("MARKETAUX_API_KEY")
+fred_api_key = os.getenv("FRED_API_KEY")
 
 DOWNLOAD_DIR = os.path.join(os.getcwd(), "data")
 if not os.path.exists(DOWNLOAD_DIR):
