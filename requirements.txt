@@ -8,3 +8,4 @@ pytz
 yfinance
 pandas
 scikit-learn
+fredapi
