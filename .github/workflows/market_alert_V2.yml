@@ -2,7 +2,7 @@ name: spx_premarket_alerts_V2_test
 
 on:
   schedule:
-    - cron: '0 12 * * 1-5'
+    - cron: '0 12 * * 1-5'  # Runs at 8:00 AM ET Mon-Fri
   workflow_dispatch:
 
 jobs:
@@ -10,21 +10,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Set up Python
+      - name: 🐍 Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: 📦 Install dependencies
         run: |
           pip install -r requirements.txt
 
-      - name: Set up Chrome
+      - name: 🌐 Set up Chrome
         uses: browser-actions/setup-chrome@latest
 
-      - name: Run script
+      - name: ▶️ Run SPX pre-market script
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
@@ -32,5 +33,4 @@ jobs:
           FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
           MARKETAUX_API_KEY: ${{ secrets.MARKETAUX_API_KEY }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          ...
-        run: python name: spx_premarket_alerts_V2_test.py
+        run: python spx_premarket_alerts_V2_test.py
