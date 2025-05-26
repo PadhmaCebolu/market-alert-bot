@@ -35,6 +35,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 finnhub_api_key = os.getenv("FINNHUB_API_KEY")
 marketaux_api_key = os.getenv("MARKETAUX_API_KEY")
 fred_api_key = os.getenv("FRED_API_KEY")
+fred = Fred(api_key=fred_api_key)
 
 DOWNLOAD_DIR = os.path.join(os.getcwd(), "data")
 if not os.path.exists(DOWNLOAD_DIR):
@@ -118,8 +119,9 @@ def scrape_headlines(url, selector, base_url=""):
 def get_all_market_news():
     headlines_raw = scrape_headlines("https://www.cnbc.com/world/?region=world", "a.Card-title")
     try:
-        res = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={finnhub_api_key}").json()
-        for item in res[:10]:
+        res = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={finnhub_api_key}")
+        res_json = res.json()
+        for item in res_json[:10] if isinstance(res_json, list) else []:
             if is_market_relevant(item.get("headline", "")):
                 headlines_raw.append(f"{item['headline']} - {item['url']}")
     except Exception as e:
