@@ -308,8 +308,21 @@ def main():
     spx, es, vix = get_spx(), get_es(), get_vix()
     prev_spx, prev_vix = get_previous_values()
 
-    log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move.strip('±+-%'), sentiment_score)
+    # ✅ Validate scraped and derived data
+    try:
+        implied_move_value = float(implied_move.strip('±+-%')) if implied_move else None
+    except:
+        implied_move_value = None
 
+    if not all(isinstance(x, float) for x in [spx, es, vix]) or implied_move_value is None:
+        print("⚠️ Skipping log and email: Market data is missing or invalid.")
+        return
+
+    # ✅ Log market data
+    log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move_value, sentiment_score)
+    print(f"✅ Logged market data for {today} to CSV")
+
+    # 🧠 Print headlines
     print("🧠 Classified Headlines with Sentiment:")
     for score, headline in news:
         print(f"{score:+d} {headline}")
@@ -319,16 +332,17 @@ def main():
     print(f"📈 Implied Move (SPY ATM): {implied_move}")
     print(f"Sentiment Score: {sentiment_score}")
 
+    # 📈 Rule-based signal
     direction = rule_based_market_bias(sentiment_score, vix, es, spx)
     print("📉 Rule-based Bias:", direction)
 
-    # Define reasons for email body
+    # Email reasons
     reasons = []
     if sentiment_score > 0: reasons.append("Positive sentiment score")
     if es > spx: reasons.append("ES futures are higher than SPX")
     if vix < 18: reasons.append("VIX is below 18 (low fear)")
 
-    # Send email
+    # 📧 Send email
     send_email(
         subject=f"📊 SPX Pre-Market Outlook – {today}",
         spx=spx,
@@ -341,6 +355,7 @@ def main():
         to_email=EMAIL_TO
     )
 
+    # 🤖 ML prediction
     market_data_path = os.path.join(DOWNLOAD_DIR, "market_features.csv")
     if os.path.exists(market_data_path):
         df = pd.read_csv(market_data_path)
@@ -351,7 +366,7 @@ def main():
             features_today = {
                 "weekly_trend": get_weekly_trend_bias(),
                 "sentiment_score": sentiment_score,
-                "implied_move": float(implied_move.strip('±+-%')),
+                "implied_move": implied_move_value,
                 "vix": vix,
                 "vix_delta": vix_delta,
                 "futures_gap": futures_gap
