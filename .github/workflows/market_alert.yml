@@ -3,7 +3,7 @@ name: Market Alert Bot
 on:
   schedule:
     - cron: '0 12 * * 1-5'  # 8 AM EDT
-    - cron: '16 16 * * 1-5' # 12 PM EDT
+    - cron: '30 15 * * 1-5' # 11:30 AM EDT
   workflow_dispatch:
 
 jobs:
