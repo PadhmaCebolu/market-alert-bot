@@ -245,7 +245,7 @@ def send_email(subject, spx, vix, es, news, direction, reasons, move_msg, to_ema
         # Decide market window message
         hour = now_est.hour
         if hour < 12:
-            market_window_note = "Note: Monitoring trends for the 8:00 AM to 12:00 PM market period.
+            market_window_note = "Note: Monitoring trends for the 8:00 AM to 12:00 PM market period."
 
 "
         else:
