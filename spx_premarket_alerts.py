@@ -332,8 +332,8 @@ def is_us_market_holiday():
 def main():
     
     if is_us_market_holiday():
-    print("📅 US Market is closed today. Skipping alert.")
-    return
+        print("📅 US Market is closed today. Skipping alert.")
+        return
     
     today = datetime.date.today()
     news = get_all_market_news()
