@@ -214,13 +214,13 @@ def train_logistic_model():
     df["target"] = (df["spx"].shift(-1) > df["spx"]).astype(int)
     df.dropna(inplace=True)
 
+    if df["target"].nunique() < 2:
+        print("⚠️ Cannot train model: only one class present in target column.")
+        return None
+
     features = ["weekly_trend", "sentiment_score", "implied_move", "vix", "vix_delta", "futures_gap"]
     X = df[features]
     y = df["target"]
-
-    if len(set(y)) < 2:
-        print("⚠️ Not enough class diversity in training labels. Skipping model training.")
-        return None
 
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
     model = LogisticRegression()
