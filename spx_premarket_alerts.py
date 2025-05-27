@@ -211,9 +211,12 @@ def train_logistic_model():
     path = os.path.join(DOWNLOAD_DIR, "market_features.csv")
     df = pd.read_csv(path)
     df.dropna(inplace=True)
+
+    # Calculate target column
     df["target"] = (df["spx"].shift(-1) > df["spx"]).astype(int)
     df.dropna(inplace=True)
 
+    # Move this check here BEFORE training
     if df["target"].nunique() < 2:
         print("⚠️ Cannot train model: only one class present in target column.")
         return None
