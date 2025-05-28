@@ -183,7 +183,7 @@ def rule_based_market_bias(sentiment_score, vix, es, spx):
         bias += 1
     return "📈 Bullish" if bias >= 2 else "📉 Bearish"
 
-def log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move, sentiment_score):
+def log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move, sentiment_score, bias_label):
     print("prev_spx:", prev_spx, "prev_vix:", prev_vix)
     vix_delta = (vix - prev_vix) / prev_vix if prev_vix and isinstance(vix, float) else 0
     futures_gap = es - prev_spx if prev_spx and isinstance(es, float) else 0
@@ -196,12 +196,13 @@ def log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move, sentimen
         "vix": vix,
         "vix_delta": vix_delta,
         "futures_gap": futures_gap,
-        "spx": spx
+        "spx": spx,
+        "bias": bias_label
     }
     path = os.path.join(DOWNLOAD_DIR, "market_features.csv")
     write_header = not os.path.exists(path)
     with open(path, 'a', newline='') as f:
-        fieldnames = ["timestamp", "weekly_trend", "sentiment_score", "implied_move", "vix", "vix_delta", "futures_gap", "spx"]
+        fieldnames = ["timestamp", "weekly_trend", "sentiment_score", "implied_move", "vix", "vix_delta", "futures_gap", "spx", "bias"]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         if write_header:
             writer.writeheader()
@@ -357,7 +358,8 @@ def main():
         return
 
     # ✅ Log market data
-    log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move_value, sentiment_score)
+    bias_label = "Bullish" if "Bullish" in direction else "Bearish"
+    log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move_value, sentiment_score, bias_label)
     print(f"✅ Logged market data for {today} to CSV")
 
     # 🧠 Print headlines
@@ -379,6 +381,7 @@ def main():
     if sentiment_score > 0: reasons.append("Positive sentiment score")
     if es > spx: reasons.append("ES futures are higher than SPX")
     if vix < 18: reasons.append("VIX is below 18 (low fear)")
+        
 
     # 📧 Send email
     send_email(
