@@ -357,10 +357,15 @@ def main():
         print("⚠️ Skipping log and email: Market data is missing or invalid.")
         return
 
-    # ✅ Log market data
+   # 📈 Rule-based signal
+    direction = rule_based_market_bias(sentiment_score, vix, es, spx)
+    print("📉 Rule-based Bias:", direction)
+
+    #✅ Log market data
     bias_label = "Bullish" if "Bullish" in direction else "Bearish"
     log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move_value, sentiment_score, bias_label)
     print(f"✅ Logged market data for {today} to CSV")
+
 
     # 🧠 Print headlines
     print("🧠 Classified Headlines with Sentiment:")
@@ -372,9 +377,6 @@ def main():
     print(f"📈 Implied Move (SPY ATM): {implied_move}")
     print(f"Sentiment Score: {sentiment_score}")
 
-    # 📈 Rule-based signal
-    direction = rule_based_market_bias(sentiment_score, vix, es, spx)
-    print("📉 Rule-based Bias:", direction)
 
     # Email reasons
     reasons = []
