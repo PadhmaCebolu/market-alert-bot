@@ -188,8 +188,9 @@ def log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move, sentimen
     vix_delta = (vix - prev_vix) / prev_vix if prev_vix and isinstance(vix, float) else 0
     futures_gap = es - prev_spx if prev_spx and isinstance(es, float) else 0
     trend_bias = get_weekly_trend_bias()
+    chicago_time = datetime.datetime.now(pytz.timezone("America/Chicago")).strftime("%Y-%m-%d %H:%M:%S")
     row = {
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": chicago_time,
         "weekly_trend": trend_bias,
         "sentiment_score": sentiment_score,
         "implied_move": implied_move,
