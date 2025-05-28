@@ -210,7 +210,8 @@ def log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move, sentimen
 
 def train_logistic_model():
     path = os.path.join(DOWNLOAD_DIR, "market_features.csv")
-    df = pd.read_csv(path)
+    df = pd.read_csv(path, usecols=["weekly_trend", "sentiment_score", "implied_move", "vix", "vix_delta", "futures_gap", "spx"])
+
     df.dropna(inplace=True)
 
     # Calculate target column
