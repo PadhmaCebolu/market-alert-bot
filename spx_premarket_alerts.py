@@ -210,40 +210,65 @@ def log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move, sentimen
 
 def train_logistic_model():
     path = os.path.join(DOWNLOAD_DIR, "market_features.csv")
-    df = pd.read_csv(path, usecols=["weekly_trend", "sentiment_score", "implied_move", "vix", "vix_delta", "futures_gap", "spx"])
+
+    try:
+        df = pd.read_csv(path, usecols=[
+            "weekly_trend", "sentiment_score", "implied_move",
+            "vix", "vix_delta", "futures_gap", "spx"
+        ])
+    except Exception as e:
+        print(f"❌ Error reading CSV: {e}")
+        return None
+
+    # Ensure all data is numeric
+    for col in df.columns:
+        df[col] = pd.to_numeric(df[col], errors="coerce")
 
     df.dropna(inplace=True)
 
-    # Calculate target column
+    # Create binary target column based on SPX next move
     df["target"] = (df["spx"].shift(-1) > df["spx"]).astype(int)
     df.dropna(inplace=True)
 
-    # Move this check here BEFORE training
+    # Handle case where only one class is present (e.g., all 0 or all 1)
     if df["target"].nunique() < 2:
         print("⚠️ Cannot train model: only one class present in target column.")
         return None
 
+    # Features for training
     features = ["weekly_trend", "sentiment_score", "implied_move", "vix", "vix_delta", "futures_gap"]
     X = df[features]
     y = df["target"]
 
+    # Train/test split (no shuffle to preserve time series order)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, shuffle=False)
+
     model = LogisticRegression()
     model.fit(X_train, y_train)
+
     accuracy = model.score(X_test, y_test)
     print(f"🔍 Logistic Regression Accuracy: {accuracy:.2f}")
     return model
 
+
 def predict_with_model(model, features_dict):
     if model is None:
         return "⚠️ No ML prediction due to training issue."
+
     import numpy as np
-    features = np.array([[features_dict[k] for k in ["weekly_trend", "sentiment_score", "implied_move", "vix", "vix_delta", "futures_gap"]]])
-    prob = model.predict_proba(features)[0][1]
-    direction = "📈 Bullish" if prob > 0.5 else "📉 Bearish"
-    print(f"🤖 ML Prediction: {direction} (Prob: {prob:.2f})")
-    return direction
-    
+    try:
+        features = np.array([[features_dict[k] for k in [
+            "weekly_trend", "sentiment_score", "implied_move",
+            "vix", "vix_delta", "futures_gap"
+        ]]])
+        prob = model.predict_proba(features)[0][1]
+        direction = "📈 Bullish" if prob > 0.5 else "📉 Bearish"
+        print(f"🤖 ML Prediction: {direction} (Prob: {prob:.2f})")
+        return direction
+    except Exception as e:
+        print(f"❌ Error during prediction: {e}")
+        return "⚠️ Prediction failed"
+
 
 def send_email(subject, spx, vix, es, news, direction, reasons, move_msg, to_email):
     try:
@@ -402,7 +427,8 @@ def main():
     # 🤖 ML prediction
     market_data_path = os.path.join(DOWNLOAD_DIR, "market_features.csv")
     if os.path.exists(market_data_path):
-        df = pd.read_csv(market_data_path)
+        df = pd.read_csv(market_data_path, usecols=["weekly_trend", "sentiment_score", "implied_move", "vix", "vix_delta", "futures_gap", "spx"])
+
         if len(df) >= 10:
             model = train_logistic_model()
             vix_delta = (vix - prev_vix) / prev_vix if prev_vix else 0
@@ -410,7 +436,7 @@ def main():
             features_today = {
                 "weekly_trend": get_weekly_trend_bias(),
                 "sentiment_score": sentiment_score,
-                "implied_move": implied_move_value,
+                "implied_move": float(implied_move_value),
                 "vix": vix,
                 "vix_delta": vix_delta,
                 "futures_gap": futures_gap
