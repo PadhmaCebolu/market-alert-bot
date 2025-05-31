@@ -136,23 +136,66 @@ def get_all_market_news():
     scores = classify_headlines_openai_weighted(headlines_raw)
     return list(zip(scores, headlines_raw))
 
-def get_price_from_investing(url):
-    try:
-        options = Options()
-        options.add_argument("--headless")
-        driver = webdriver.Chrome(options=options)
-        driver.get(url)
-        time.sleep(4)
-        price = driver.find_element(By.CSS_SELECTOR, '[data-test="instrument-price-last"]').text.replace(",", "")
-        driver.quit()
-        return float(price)
-    except Exception as e:
-        print(f"⚠️ Error retrieving price from {url}:", e)
-        return "N/A"
+ddef get_price_from_investing(url, retries=2, delay=3):
+    for attempt in range(retries):
+        try:
+            print(f"🌐 Attempt {attempt+1} to fetch price from: {url}")
+            options = Options()
+            options.add_argument("--headless=new")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--no-sandbox")
+            driver = webdriver.Chrome(options=options)
 
-def get_spx(): return get_price_from_investing("https://www.investing.com/indices/us-spx-500")
-def get_es(): return get_price_from_investing("https://www.investing.com/indices/us-spx-500-futures")
-def get_vix(): return get_price_from_investing("https://www.investing.com/indices/volatility-s-p-500")
+            driver.get(url)
+            time.sleep(4)  # Let JS load
+
+            price_element = driver.find_element(By.CSS_SELECTOR, '[data-test="instrument-price-last"]')
+            price_text = price_element.text.replace(",", "")
+            price = float(price_text)
+
+            driver.quit()
+            return price
+        except Exception as e:
+            print(f"⚠️ Attempt {attempt+1} failed: {e}")
+            if attempt == retries - 1:
+                print(f"❌ Failed to fetch price from {url} after {retries} attempts.")
+            time.sleep(delay)
+            try:
+                driver.quit()
+            except:
+                pass
+    return None
+
+def get_price_finnhub(symbol):
+    try:
+        url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={finnhub_api_key}"
+        res = requests.get(url).json()
+        return res.get("c")  # 'c' is the current price
+    except Exception as e:
+        print(f"❌ Finnhub fallback failed for {symbol}: {e}")
+        return None
+
+def get_spx():
+    price = get_price_from_investing("https://www.investing.com/indices/us-spx-500")
+    if not price:
+        print("🔁 Falling back to Finnhub for SPX")
+        price = get_price_finnhub("^GSPC")
+    return price
+
+def get_es():
+    price = get_price_from_investing("https://www.investing.com/indices/us-spx-500-futures")
+    if not price:
+        print("🔁 Falling back to Finnhub for ES")
+        price = get_price_finnhub("ES=F")
+    return price
+
+def get_vix():
+    price = get_price_from_investing("https://www.investing.com/indices/volatility-s-p-500")
+    if not price:
+        print("🔁 Falling back to Finnhub for VIX")
+        price = get_price_finnhub("^VIX")
+    return price
+
 
 def get_previous_values():
     try:
