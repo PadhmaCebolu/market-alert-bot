@@ -136,7 +136,7 @@ def get_all_market_news():
     scores = classify_headlines_openai_weighted(headlines_raw)
     return list(zip(scores, headlines_raw))
 
-ddef get_price_from_investing(url, retries=2, delay=3):
+def get_price_from_investing(url, retries=2, delay=3):
     for attempt in range(retries):
         try:
             print(f"🌐 Attempt {attempt+1} to fetch price from: {url}")
