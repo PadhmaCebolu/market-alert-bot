@@ -463,10 +463,10 @@ def main():
     "Finnhub": 1.0,
     "Marketaux": 1.0
 }
-sentiment_score = sum(score * source_weights.get(src, 1.0) for src, score, _ in news)
+    sentiment_score = sum(score * source_weights.get(src, 1.0) for src, score, _ in news)
 
-sentiment_score = sentiment_score / len(news) if news else 0
-sentiment_score = max(min(sentiment_score, 10), -10)
+    sentiment_score = sentiment_score / len(news) if news else 0
+    sentiment_score = max(min(sentiment_score, 10), -10)
 
 
 
