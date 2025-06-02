@@ -141,7 +141,8 @@ def get_all_market_news():
     # Finnhub
     try:
         res = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={finnhub_api_key}")
-        for item in res.json()[:10]:
+        data = res.json()
+        for item in data[:10]:
             if is_market_relevant(item.get("headline", "")):
                 headlines_raw.append({"source": "Finnhub", "headline": f"{item['headline']} - {item['url']}"})
     except Exception as e:
@@ -149,7 +150,9 @@ def get_all_market_news():
 
     # Marketaux
     try:
-        res = requests.get(f"https://api.marketaux.com/v1/news/all?symbols=SPY&filter_entities=true&language=en&api_token={marketaux_api_key}")
+        res = requests.get(
+            f"https://api.marketaux.com/v1/news/all?symbols=SPY&filter_entities=true&language=en&api_token={marketaux_api_key}"
+        ).json()
         for article in res.get("data", [])[:10]:
             if is_market_relevant(article.get("title", "")):
                 headlines_raw.append({"source": "Marketaux", "headline": f"{article['title']} - {article['url']}"})
@@ -267,7 +270,7 @@ def rule_based_market_bias(sentiment_score, vix, es, spx):
         bias -= 1
         reasons.append("Strong negative sentiment (≤ -3)")
 
-    if es and spx and (es - spx) > 10:
+    if (es - spx) / spx > 0.0015:  # ~0.15%
         bias += 1
         reasons.append("ES futures significantly above SPX")
 
