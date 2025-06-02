@@ -74,7 +74,15 @@ def get_implied_move_yfinance(ticker="SPY", sentiment_score=None):
 
 def classify_headlines_openai_weighted(headlines):
     prompt = "\n".join([f"{i+1}. {h}" for i, h in enumerate(headlines)])
-    system = "You're a financial analyst. For each headline, return a number between -5 and +5. Format: 1. -3"
+    system = (
+    "You are a financial market sentiment classifier. Your task is to score each headline "
+    "based on its impact on the S&P 500 using this scale:\n"
+    "-5 = Extremely bearish\n-3 = Bearish\n 0 = Neutral\n+3 = Bullish\n+5 = Extremely bullish\n\n"
+    "Return ONLY a numbered list with sentiment scores in this format:\n"
+    "1. +3\n2. -2\n3. +5\n\n"
+    "Do not include any explanations or repeat the headlines."
+)
+
     try:
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -85,7 +93,6 @@ def classify_headlines_openai_weighted(headlines):
             max_tokens=200
         )
         output = response.choices[0].message.content.strip()
-        print("🧠 GPT Output:\n", output)
         lines = output.splitlines()
         scores = []
         for line in lines:
@@ -93,66 +100,155 @@ def classify_headlines_openai_weighted(headlines):
             scores.append(int(match.group()) if match else 0)
         return scores
     except Exception as e:
-        print("❌ Weighted classification failed:", e)
+        print("❌ OpenAI scoring failed:", e)
         return [0] * len(headlines)
 
+    
+
 def is_market_relevant(text):
-    keywords = ["fed", "tariff", "rate", "inflation", "yields", "bond", "treasury", "earnings", "revenue",
-                "stocks", "markets", "recession", "jobless", "cpi", "ppi", "gdp", "volatility"]
-    return any(k in text.lower() for k in keywords)
+    keywords = [
+        "fed", "federal reserve", "interest rate", "rate hike", "rate cut", "inflation", "cpi", "ppi", "gdp",
+        "recession", "soft landing", "yields", "bond", "treasury", "10-year", "2-year", "earnings", "guidance",
+        "forecast", "dividend", "layoffs", "spx", "spy", "s&p 500", "volatility", "vix", "fomc", "jobless",
+        "unemployment", "consumer confidence", "core inflation", "opec", "china", "geopolitical", "russia",
+        "bull market", "bear market", "market rally", "crash", "quantitative tightening", "liquidity", "debt ceiling"
+    ]
+    text_lower = text.lower()
+    return any(k in text_lower for k in keywords)
+
+def is_stock_event_relevant(text):
+    tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA", "META"]
+    events = ["earnings", "guidance", "forecast", "downgrade", "upgrade", "target", "revenue", "chip", "ai", "report", "miss", "beat"]
+    text_upper = text.upper()
+    text_lower = text.lower()
+    return any(t in text_upper for t in tickers) and any(w in text_lower for w in events)
+
 
 def scrape_headlines(url, selector, base_url=""):
     headlines = []
     try:
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
         soup = BeautifulSoup(res.text, 'html.parser')
-        for el in soup.select(selector)[:10]:
+        elements = soup.select(selector)[:15]  # Look deeper into list
+
+        for el in elements:
             text = el.get_text(strip=True)
             link = el.get("href", "")
-            if text and is_market_relevant(text):
-                full_link = f"{base_url}{link}" if link.startswith("/") else link
-                headlines.append(f"{text} - {full_link}")
+            full_link = f"{base_url}{link}" if link.startswith("/") else link
+
+            if text:
+                if is_market_relevant(text) or is_stock_event_relevant(text):
+                    headlines.append(f"{text} - {full_link}")
+                else:
+                    print(f"🔕 Ignored: {text}")
     except Exception as e:
         print(f"⚠️ Error scraping {url}:", e)
     return headlines
 
+
 def get_all_market_news():
-    headlines_raw = scrape_headlines("https://www.cnbc.com/world/?region=world", "a.Card-title")
+    headlines_raw = []
+
+    # CNBC
+    headlines_cnbc = scrape_headlines("https://www.cnbc.com/world/?region=world", "a.LatestNews-headline")
+
+    headlines_raw += [{"source": "CNBC", "headline": h} for h in headlines_cnbc]
+
+    # Finnhub
     try:
         res = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={finnhub_api_key}")
-        res_json = res.json()
-        for item in res_json[:10] if isinstance(res_json, list) else []:
+        data = res.json()
+        for item in data[:10]:
             if is_market_relevant(item.get("headline", "")):
-                headlines_raw.append(f"{item['headline']} - {item['url']}")
+                headlines_raw.append({"source": "Finnhub", "headline": f"{item['headline']} - {item['url']}"})
     except Exception as e:
         print("❌ Finnhub news fetch failed:", e)
+
+    # Marketaux
     try:
         res = requests.get(f"https://api.marketaux.com/v1/news/all?symbols=SPY&filter_entities=true&language=en&api_token={marketaux_api_key}").json()
         for article in res.get("data", [])[:10]:
             if is_market_relevant(article.get("title", "")):
-                headlines_raw.append(f"{article['title']} - {article['url']}")
+                headlines_raw.append({"source": "Marketaux", "headline": f"{article['title']} - {article['url']}"})
     except Exception as e:
         print("❌ Marketaux news fetch failed:", e)
-    scores = classify_headlines_openai_weighted(headlines_raw)
-    return list(zip(scores, headlines_raw))
 
-def get_price_from_investing(url):
+    # Sentiment scoring
+    headlines_only = [item["headline"] for item in headlines_raw]
+    scores = classify_headlines_openai_weighted(headlines_only)
+
+
+
+    for i, score in enumerate(scores):
+        headlines_raw[i]["score"] = score
+
+    # Final output
+    final_news = [(item["source"], item["score"], item["headline"]) for item in headlines_raw]
+
+
+    return final_news
+
+
+def get_price_from_investing(url, retries=2, delay=3):
+    for attempt in range(retries):
+        try:
+            print(f"🌐 Attempt {attempt+1} to fetch price from: {url}")
+            options = Options()
+            options.add_argument("--headless=new")
+            options.add_argument("--disable-gpu")
+            options.add_argument("--no-sandbox")
+            driver = webdriver.Chrome(options=options)
+
+            driver.get(url)
+            time.sleep(4)  # Let JS load
+
+            price_element = driver.find_element(By.CSS_SELECTOR, '[data-test="instrument-price-last"]')
+            price_text = price_element.text.replace(",", "")
+            price = float(price_text)
+
+            driver.quit()
+            return price
+        except Exception as e:
+            print(f"⚠️ Attempt {attempt+1} failed: {e}")
+            if attempt == retries - 1:
+                print(f"❌ Failed to fetch price from {url} after {retries} attempts.")
+            time.sleep(delay)
+            try:
+                driver.quit()
+            except:
+                pass
+    return None
+
+def get_price_finnhub(symbol):
     try:
-        options = Options()
-        options.add_argument("--headless")
-        driver = webdriver.Chrome(options=options)
-        driver.get(url)
-        time.sleep(4)
-        price = driver.find_element(By.CSS_SELECTOR, '[data-test="instrument-price-last"]').text.replace(",", "")
-        driver.quit()
-        return float(price)
+        url = f"https://finnhub.io/api/v1/quote?symbol={symbol}&token={finnhub_api_key}"
+        res = requests.get(url).json()
+        return res.get("c")  # 'c' is the current price
     except Exception as e:
-        print(f"⚠️ Error retrieving price from {url}:", e)
-        return "N/A"
+        print(f"❌ Finnhub fallback failed for {symbol}: {e}")
+        return None
 
-def get_spx(): return get_price_from_investing("https://www.investing.com/indices/us-spx-500")
-def get_es(): return get_price_from_investing("https://www.investing.com/indices/us-spx-500-futures")
-def get_vix(): return get_price_from_investing("https://www.investing.com/indices/volatility-s-p-500")
+def get_spx():
+    price = get_price_from_investing("https://www.investing.com/indices/us-spx-500")
+    if not price:
+        print("🔁 Falling back to Finnhub for SPX")
+        price = get_price_finnhub("^GSPC")
+    return price
+
+def get_es():
+    price = get_price_from_investing("https://www.investing.com/indices/us-spx-500-futures")
+    if not price:
+        print("🔁 Falling back to Finnhub for ES")
+        price = get_price_finnhub("ES=F")
+    return price
+
+def get_vix():
+    price = get_price_from_investing("https://www.investing.com/indices/volatility-s-p-500")
+    if not price:
+        print("🔁 Falling back to Finnhub for VIX")
+        price = get_price_finnhub("^VIX")
+    return price
+
 
 def get_previous_values():
     try:
@@ -173,23 +269,69 @@ def get_weekly_trend_bias():
     except:
         return 0
 
-def rule_based_market_bias(sentiment_score, vix, es, spx):
-    bias = 0
-    if sentiment_score > 0:
-        bias += 1
-    if es > spx:
-        bias += 1
-    if vix < 18:
-        bias += 1
-    return "📈 Bullish" if bias >= 2 else "📉 Bearish"
+def rule_based_market_bias(sentiment_score, vix, es, spx, implied_move=None, vix_30day_avg=None):
+    bias = 0.0
+    reasons = []
+
+    # Normalize sentiment to reduce overweighting
+    capped_sentiment = max(min(sentiment_score, 10), -10)
+    bias += (capped_sentiment / 6.0)  # reduced from /5.0
+    if abs(capped_sentiment) >= 3:
+        reasons.append(f"Moderate-to-strong sentiment ({capped_sentiment:+})")
+
+    # ES Futures vs SPX (stricter threshold)
+    if es and spx:
+        delta = es - spx
+        pct_gap = delta / spx
+        if pct_gap > 0.0025:  # previously 0.0015
+            bias += 0.5
+            reasons.append("ES futures notably above SPX")
+        elif pct_gap < -0.0025:
+            bias -= 0.5
+            reasons.append("ES futures notably below SPX")
+
+    # VIX interpretation
+    if vix:
+        if vix_30day_avg:
+            if vix < vix_30day_avg * 0.9:
+                bias += 0.5
+                reasons.append("VIX significantly below average (low fear)")
+            elif vix > vix_30day_avg * 1.1:
+                bias -= 0.5
+                reasons.append("VIX significantly above average (high fear)")
+        else:
+            if vix < 18:
+                bias += 0.5
+                reasons.append("VIX < 18 - low fear")
+            elif vix > 25:
+                bias -= 0.5
+                reasons.append("VIX > 25 - elevated fear")
+
+    # Implied move weight
+    if implied_move is not None:
+        if implied_move < 0.2:
+            bias *= 0.5
+            reasons.append("Very low implied move - market indecision")
+        elif implied_move > 1.2:
+            bias *= 1.1
+            reasons.append("Large implied move - high conviction pricing")
+
+    # 🧠 Contrarian pattern detection
+    if capped_sentiment > 3 and es > spx and implied_move and implied_move < 0.5:
+        bias -= 0.5
+        reasons.append("Contrarian setup: strong sentiment + low move + futures gap")
+
+    direction = "📈 Bullish" if bias >= 0 else "📉 Bearish"
+    return direction, reasons
 
 def log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move, sentiment_score, bias_label):
     print("prev_spx:", prev_spx, "prev_vix:", prev_vix)
     vix_delta = (vix - prev_vix) / prev_vix if prev_vix and isinstance(vix, float) else 0
     futures_gap = es - prev_spx if prev_spx and isinstance(es, float) else 0
     trend_bias = get_weekly_trend_bias()
+    chicago_time = datetime.datetime.now(pytz.timezone("America/Chicago")).strftime("%Y-%m-%d %H:%M:%S")
     row = {
-        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "timestamp": chicago_time,
         "weekly_trend": trend_bias,
         "sentiment_score": sentiment_score,
         "implied_move": implied_move,
@@ -296,7 +438,7 @@ def send_email(subject, spx, vix, es, news, direction, reasons, move_msg, to_ema
 🔹 SPX: {spx}  🔺 VIX: {vix}  📉 ES: {es}
 
 📰 Headlines:
-{chr(10).join([f"- {h if isinstance(h, str) else str(h)}" for *_, h in news])}
+{chr(10).join([f"- [{src}] {headline} ({score:+})" for src, score, headline in news])}
 
 📊 Market Bias: {direction}
 {chr(10).join([f"- {r}" for r in reasons])}
@@ -321,7 +463,7 @@ Generated by CDUS Trading Bot • {current_time_cst}
 
             <h3>📰 Headlines:</h3>
             <ul>
-                {''.join(f"<li>{h if isinstance(h, str) else str(h)}</li>" for *_, h in news)}
+                {''.join(f"<li>[{src}] {headline} ({score:+})</li>" for src, score, headline in news)}
             </ul>
 
             <h3>📊 Market Bias: {direction}</h3>
@@ -367,7 +509,18 @@ def main():
     
     today = datetime.date.today()
     news = get_all_market_news()
-    sentiment_score = sum(score for score, _ in news)
+    source_weights = {
+    "CNBC": 1.5,
+    "Finnhub": 1.0,
+    "Marketaux": 1.0
+}
+    sentiment_score = sum(score * source_weights.get(src, 1.0) for src, score, _ in news)
+
+    sentiment_score = sentiment_score / len(news) if news else 0
+    sentiment_score = max(min(sentiment_score, 10), -10)
+
+
+
 
     implied_move = get_implied_move_yfinance("SPY", sentiment_score)
     spx, es, vix = get_spx(), get_es(), get_vix()
@@ -395,8 +548,8 @@ def main():
 
     # 🧠 Print headlines
     print("🧠 Classified Headlines with Sentiment:")
-    for score, headline in news:
-        print(f"{score:+d} {headline}")
+    for src, score, headline in news:
+        print(f"[{src}] {score:+d} → {headline}")
 
     print(f"📊 Pre-Market Alert for {today}")
     print(f"SPX: {spx}, ES: {es}, VIX: {vix}")
@@ -417,7 +570,7 @@ def main():
         spx=spx,
         vix=vix,
         es=es,
-        news=[(score, 0, headline) for score, headline in news],
+        news=[(src, score, headline) for src, score, headline in news],
         direction=direction,
         reasons=reasons,
         move_msg=implied_move,
