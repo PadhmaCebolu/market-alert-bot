@@ -75,20 +75,13 @@ def get_implied_move_yfinance(ticker="SPY", sentiment_score=None):
 def classify_headlines_openai_weighted(headlines):
     prompt = "\n".join([f"{i+1}. {h}" for i, h in enumerate(headlines)])
     system = (
-        "You are a financial market analyst. You are given a list of market news headlines. "
-        "For each headline, assess the potential impact on the U.S. stock market (specifically S&P 500) "
-        "and assign a sentiment score between -5 and +5:\n\n"
-        "-5 = Extremely bearish (very negative impact)\n"
-        "-3 = Bearish\n"
-        " 0 = Neutral or unclear\n"
-        "+3 = Bullish\n"
-        "+5 = Extremely bullish (very positive impact)\n\n"
-        "Only provide the sentiment score for each headline in the format:\n"
-        "1. +3\n"
-        "2. -2\n"
-        "3.  0\n\n"
-        "Do not explain your reasoning or repeat the headlines."
-    )
+    "You are a financial market sentiment classifier. Your task is to score each headline "
+    "based on its impact on the S&P 500 using this scale:\n"
+    "-5 = Extremely bearish\n-3 = Bearish\n 0 = Neutral\n+3 = Bullish\n+5 = Extremely bullish\n\n"
+    "Return ONLY a numbered list with sentiment scores in this format:\n"
+    "1. +3\n2. -2\n3. +5\n\n"
+    "Do not include any explanations or repeat the headlines."
+)
 
     try:
         response = openai.chat.completions.create(
@@ -113,30 +106,52 @@ def classify_headlines_openai_weighted(headlines):
     
 
 def is_market_relevant(text):
-    keywords = ["fed", "tariff", "rate", "inflation", "yields", "bond", "treasury", "earnings", "revenue",
-                "stocks", "markets", "recession", "jobless", "cpi", "ppi", "gdp", "volatility"]
-    return any(k in text.lower() for k in keywords)
+    keywords = [
+        "fed", "federal reserve", "interest rate", "rate hike", "rate cut", "inflation", "cpi", "ppi", "gdp",
+        "recession", "soft landing", "yields", "bond", "treasury", "10-year", "2-year", "earnings", "guidance",
+        "forecast", "dividend", "layoffs", "spx", "spy", "s&p 500", "volatility", "vix", "fomc", "jobless",
+        "unemployment", "consumer confidence", "core inflation", "opec", "china", "geopolitical", "russia",
+        "bull market", "bear market", "market rally", "crash", "quantitative tightening", "liquidity", "debt ceiling"
+    ]
+    text_lower = text.lower()
+    return any(k in text_lower for k in keywords)
+
+def is_stock_event_relevant(text):
+    tickers = ["AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "TSLA", "META"]
+    events = ["earnings", "guidance", "forecast", "downgrade", "upgrade", "target", "revenue", "chip", "ai", "report", "miss", "beat"]
+    text_upper = text.upper()
+    text_lower = text.lower()
+    return any(t in text_upper for t in tickers) and any(w in text_lower for w in events)
+
 
 def scrape_headlines(url, selector, base_url=""):
     headlines = []
     try:
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
         soup = BeautifulSoup(res.text, 'html.parser')
-        for el in soup.select(selector)[:10]:
+        elements = soup.select(selector)[:15]  # Look deeper into list
+
+        for el in elements:
             text = el.get_text(strip=True)
             link = el.get("href", "")
-            if text and is_market_relevant(text):
-                full_link = f"{base_url}{link}" if link.startswith("/") else link
-                headlines.append(f"{text} - {full_link}")
+            full_link = f"{base_url}{link}" if link.startswith("/") else link
+
+            if text:
+                if is_market_relevant(text) or is_stock_event_relevant(text):
+                    headlines.append(f"{text} - {full_link}")
+                else:
+                    print(f"🔕 Ignored: {text}")
     except Exception as e:
         print(f"⚠️ Error scraping {url}:", e)
     return headlines
+
 
 def get_all_market_news():
     headlines_raw = []
 
     # CNBC
-    headlines_cnbc = scrape_headlines("https://www.cnbc.com/world/?region=world", "a.Card-title")
+    headlines_cnbc = scrape_headlines("https://www.cnbc.com/world/?region=world", "a.LatestNews-headline")
+
     headlines_raw += [{"source": "CNBC", "headline": h} for h in headlines_cnbc]
 
     # Finnhub
@@ -161,9 +176,7 @@ def get_all_market_news():
     # Sentiment scoring
     headlines_only = [item["headline"] for item in headlines_raw]
     scores = classify_headlines_openai_weighted(headlines_only)
-    print("\n🧠 GPT Output:")
-    for i, (headline, score) in enumerate(zip(headlines_only, scores), 1):
-        print(f"{i}. ({score:+}) {headline}")
+
 
 
     for i, score in enumerate(scores):
@@ -172,9 +185,6 @@ def get_all_market_news():
     # Final output
     final_news = [(item["source"], item["score"], item["headline"]) for item in headlines_raw]
 
-    print("\n🧠 Final Scored Headlines:")
-    for src, score, text in final_news:
-        print(f"[{src}] ({score:+}) → {text}")
 
     return final_news
 
