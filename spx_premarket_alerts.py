@@ -162,7 +162,12 @@ def get_all_market_news():
     scores = classify_headlines_openai_weighted(headlines_only)
 
     # Return (source, score, headline)
-    return [(src, score, text) for (src, text), score in zip(headlines_raw, scores)]
+    final_news = []
+    for (src, text), score in zip(headlines_raw, scores):
+        final_news.append((src, score, text))
+        print(f"[{src}] ({score:+}) → {text}")  # Optional debug line
+
+    return final_news
 
 
 def get_price_from_investing(url, retries=2, delay=3):
