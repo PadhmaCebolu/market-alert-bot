@@ -100,7 +100,6 @@ def classify_headlines_openai_weighted(headlines):
             max_tokens=200
         )
         output = response.choices[0].message.content.strip()
-        print("🧠 GPT Output:\n", output)
         lines = output.splitlines()
         scores = []
         for line in lines:
@@ -108,8 +107,10 @@ def classify_headlines_openai_weighted(headlines):
             scores.append(int(match.group()) if match else 0)
         return scores
     except Exception as e:
-        print("❌ Weighted classification failed:", e)
+        print("❌ OpenAI scoring failed:", e)
         return [0] * len(headlines)
+
+    
 
 def is_market_relevant(text):
     keywords = ["fed", "tariff", "rate", "inflation", "yields", "bond", "treasury", "earnings", "revenue",
@@ -134,51 +135,46 @@ def scrape_headlines(url, selector, base_url=""):
 def get_all_market_news():
     headlines_raw = []
 
-    # CNBC (weight = 1.5)
+    # CNBC
     headlines_cnbc = scrape_headlines("https://www.cnbc.com/world/?region=world", "a.Card-title")
     headlines_raw += [{"source": "CNBC", "headline": h} for h in headlines_cnbc]
 
     # Finnhub
-
     try:
         res = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={finnhub_api_key}")
-        news_items = res.json()  # <-- parse once, then slice
-        for item in news_items[:10]:  # ✅ now it's sliceable
+        data = res.json()
+        for item in data[:10]:
             if is_market_relevant(item.get("headline", "")):
-                headlines_raw.append({
-                    "source": "Finnhub",
-                    "headline": f"{item['headline']} - {item['url']}"
-                })
+                headlines_raw.append({"source": "Finnhub", "headline": f"{item['headline']} - {item['url']}"})
     except Exception as e:
         print("❌ Finnhub news fetch failed:", e)
 
-
     # Marketaux
     try:
-        res = requests.get(
-            f"https://api.marketaux.com/v1/news/all?symbols=SPY&filter_entities=true&language=en&api_token={marketaux_api_key}"
-        ).json()
+        res = requests.get(f"https://api.marketaux.com/v1/news/all?symbols=SPY&filter_entities=true&language=en&api_token={marketaux_api_key}").json()
         for article in res.get("data", [])[:10]:
             if is_market_relevant(article.get("title", "")):
                 headlines_raw.append({"source": "Marketaux", "headline": f"{article['title']} - {article['url']}"})
     except Exception as e:
         print("❌ Marketaux news fetch failed:", e)
 
-    # Score only the headlines
+    # Sentiment scoring
     headlines_only = [item["headline"] for item in headlines_raw]
     scores = classify_headlines_openai_weighted(headlines_only)
+    print("\n🧠 GPT Output:")
+    for i, (headline, score) in enumerate(zip(headlines_only, scores), 1):
+        print(f"{i}. ({score:+}) {headline}")
 
-    # Attach scores directly
+
     for i, score in enumerate(scores):
         headlines_raw[i]["score"] = score
 
-    # Return as list of (src, score, headline)
+    # Final output
     final_news = [(item["source"], item["score"], item["headline"]) for item in headlines_raw]
 
-    # Optional: print for debug
     print("\n🧠 Final Scored Headlines:")
-    for src, score, headline in final_news:
-        print(f"[{src}] ({score:+}) → {headline}")
+    for src, score, text in final_news:
+        print(f"[{src}] ({score:+}) → {text}")
 
     return final_news
 
