@@ -41,6 +41,12 @@ DOWNLOAD_DIR = os.path.join(os.getcwd(), "data")
 if not os.path.exists(DOWNLOAD_DIR):
     os.makedirs(DOWNLOAD_DIR)
 
+# Set unified Chrome User-Agent
+CHROME_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+)
+HEADERS = {"User-Agent": CHROME_USER_AGENT}
 
 def get_implied_move_yfinance(ticker="SPY", sentiment_score=None):
     try:
@@ -75,13 +81,16 @@ def get_implied_move_yfinance(ticker="SPY", sentiment_score=None):
 def classify_headlines_openai_weighted(headlines):
     prompt = "\n".join([f"{i+1}. {h}" for i, h in enumerate(headlines)])
     system = (
-    "You are a financial market sentiment classifier. Your task is to score each headline "
-    "based on its impact on the S&P 500 using this scale:\n"
+    "You are a financial market sentiment classifier. ONLY score headlines that could realistically "
+    "impact the direction of the S&P 500 index within the next trading day. Ignore headlines that are "
+    "educational, unrelated to the market, or low-impact (e.g., crime, tutorials, local news). "
+    "Use this scale:\n"
     "-5 = Extremely bearish\n-3 = Bearish\n 0 = Neutral\n+3 = Bullish\n+5 = Extremely bullish\n\n"
-    "Return ONLY a numbered list with sentiment scores in this format:\n"
-    "1. +3\n2. -2\n3. +5\n\n"
-    "Do not include any explanations or repeat the headlines."
+    "Output ONLY a numbered list like this:\n"
+    "1. +3\n2. -2\n3. 0\n\n"
+    "Do NOT include any explanations or repeat the headlines."
 )
+
 
     try:
         response = openai.chat.completions.create(
@@ -97,7 +106,10 @@ def classify_headlines_openai_weighted(headlines):
         scores = []
         for line in lines:
             match = re.search(r"[-+]?[0-9]+", line)
-            scores.append(int(match.group()) if match else 0)
+            raw_score = int(match.group()) if match else 0
+            capped_score = max(min(raw_score, 5), -5)  # Clamp to -5 to +5
+            scores.append(capped_score)
+
         return scores
     except Exception as e:
         print("❌ OpenAI scoring failed:", e)
@@ -124,12 +136,16 @@ def is_stock_event_relevant(text):
     return any(t in text_upper for t in tickers) and any(w in text_lower for w in events)
 
 
+def is_educational_or_irrelevant(text):
+    keywords = ["how to", "understanding", "explained", "tutorial", "what is", "guide", "charged with", "shooting", "fire", "accident", "weather"]
+    return any(k in text.lower() for k in keywords)
+
 def scrape_headlines(url, selector, base_url=""):
     headlines = []
     try:
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
         soup = BeautifulSoup(res.text, 'html.parser')
-        elements = soup.select(selector)[:15]  # Look deeper into list
+        elements = soup.select(selector)[:15]
 
         for el in elements:
             text = el.get_text(strip=True)
@@ -137,56 +153,87 @@ def scrape_headlines(url, selector, base_url=""):
             full_link = f"{base_url}{link}" if link.startswith("/") else link
 
             if text:
-                if is_market_relevant(text) or is_stock_event_relevant(text):
-                    headlines.append(f"{text} - {full_link}")
-                else:
-                    print(f"🔕 Ignored: {text}")
+                headlines.append(f"{text} - {full_link}")
+
     except Exception as e:
         print(f"⚠️ Error scraping {url}:", e)
+    return headlines  
+
+# CNBC
+def fetch_cnbc():
+    headlines = []
+    try:
+        url = "https://www.cnbc.com/world/?region=world"
+        soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, 'html.parser')
+        for tag in soup.select("a.LatestNews-headline")[:15]:
+            text = tag.get_text(strip=True)
+            href = tag.get("href", "")
+            if text and not is_educational_or_irrelevant(text):
+                headlines.append(("CNBC", f"{text} - {href}"))
+    except Exception as e:
+        print("❌ CNBC scrape failed:", e)
     return headlines
 
+# Reuters
+def fetch_reuters():
+    headlines = []
+    try:
+        url = "https://www.reuters.com/markets/"
+        soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, 'html.parser')
+        for tag in soup.select("a[class^='text__text']"):
+            text = tag.get_text(strip=True)
+            href = tag.get("href", "")
+            full_link = f"https://www.reuters.com{href}" if href.startswith("/") else href
+            if text and is_market_relevant(text) and not is_educational_or_irrelevant(text):
+                headlines.append(("Reuters", f"{text} - {full_link}"))
+    except Exception as e:
+        print("❌ Reuters scrape failed:", e)
+    return headlines
+
+# Bloomberg
+def fetch_bloomberg():
+    headlines = []
+    try:
+        url = "https://www.bloomberg.com/markets"
+        soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, 'html.parser')
+        for block in soup.select("div.Headline_phoenix__Dvz0u")[:10]:
+            a_tag = block.find("a")
+            if a_tag:
+                text = a_tag.get_text(strip=True)
+                href = a_tag.get("href", "")
+                full_link = f"https://www.bloomberg.com{href}" if href.startswith("/") else href
+                if text and is_market_relevant(text) and not is_educational_or_irrelevant(text):
+                    headlines.append(("Bloomberg", f"{text} - {full_link}"))
+    except Exception as e:
+        print("❌ Bloomberg scrape failed:", e)
+    return headlines
+
+# Investing.com
+def fetch_investing():
+    headlines = []
+    try:
+        url = "https://www.investing.com/news/latest-news"
+        soup = BeautifulSoup(requests.get(url, headers=HEADERS).text, 'html.parser')
+        for tag in soup.select("div.mediumTitle1 article")[:10]:
+            a_tag = tag.select_one(".title a")
+            if a_tag:
+                text = a_tag.get_text(strip=True)
+                href = a_tag.get("href", "")
+                full_link = f"https://www.investing.com{href}" if href.startswith("/") else href
+                if text and is_market_relevant(text) and not is_educational_or_irrelevant(text):
+                    headlines.append(("Investing", f"{text} - {full_link}"))
+    except Exception as e:
+        print("❌ Investing.com scrape failed:", e)
+    return headlines
+
+# Master function
 
 def get_all_market_news():
-    headlines_raw = []
+    raw = fetch_cnbc() + fetch_reuters() + fetch_bloomberg() + fetch_investing()
+    texts = [h for _, h in raw]
+    scores = classify_headlines_openai_weighted(texts)
+    return [(src, score, headline) for (src, headline), score in zip(raw, scores)]
 
-    # CNBC
-    headlines_cnbc = scrape_headlines("https://www.cnbc.com/world/?region=world", "a.LatestNews-headline")
-
-    headlines_raw += [{"source": "CNBC", "headline": h} for h in headlines_cnbc]
-
-    # Finnhub
-    try:
-        res = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={finnhub_api_key}")
-        data = res.json()
-        for item in data[:10]:
-            if is_market_relevant(item.get("headline", "")):
-                headlines_raw.append({"source": "Finnhub", "headline": f"{item['headline']} - {item['url']}"})
-    except Exception as e:
-        print("❌ Finnhub news fetch failed:", e)
-
-    # Marketaux
-    try:
-        res = requests.get(f"https://api.marketaux.com/v1/news/all?symbols=SPY&filter_entities=true&language=en&api_token={marketaux_api_key}").json()
-        for article in res.get("data", [])[:10]:
-            if is_market_relevant(article.get("title", "")):
-                headlines_raw.append({"source": "Marketaux", "headline": f"{article['title']} - {article['url']}"})
-    except Exception as e:
-        print("❌ Marketaux news fetch failed:", e)
-
-    # Sentiment scoring
-    headlines_only = [item["headline"] for item in headlines_raw]
-    scores = classify_headlines_openai_weighted(headlines_only)
-
-
-
-    for i, score in enumerate(scores):
-        headlines_raw[i]["score"] = score
-
-    # Final output
-    final_news = [(item["source"], item["score"], item["headline"]) for item in headlines_raw]
-
-
-    return final_news
 
 
 def get_price_from_investing(url, retries=2, delay=3):
@@ -509,17 +556,16 @@ def main():
     
     today = datetime.date.today()
     news = get_all_market_news()
+    if news is None:
+        print("❌ News scraping failed. Skipping alert.")
+        return
+
     source_weights = {
     "CNBC": 1.5,
-    "Finnhub": 1.0,
-    "Marketaux": 1.0
+    "Reuters": 2.0
 }
     sentiment_score = sum(score * source_weights.get(src, 1.0) for src, score, _ in news)
-
     sentiment_score = sentiment_score / len(news) if news else 0
-    sentiment_score = max(min(sentiment_score, 10), -10)
-
-
 
 
     implied_move = get_implied_move_yfinance("SPY", sentiment_score)
