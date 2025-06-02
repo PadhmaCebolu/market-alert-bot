@@ -139,14 +139,19 @@ def get_all_market_news():
     headlines_raw += [{"source": "CNBC", "headline": h} for h in headlines_cnbc]
 
     # Finnhub
+
     try:
         res = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={finnhub_api_key}")
-        data = res.json()
-        for item in data[:10]:
+        news_items = res.json()  # <-- parse once, then slice
+        for item in news_items[:10]:  # ✅ now it's sliceable
             if is_market_relevant(item.get("headline", "")):
-                headlines_raw.append({"source": "Finnhub", "headline": f"{item['headline']} - {item['url']}"})
+                headlines_raw.append({
+                    "source": "Finnhub",
+                    "headline": f"{item['headline']} - {item['url']}"
+                })
     except Exception as e:
         print("❌ Finnhub news fetch failed:", e)
+
 
     # Marketaux
     try:
@@ -258,32 +263,57 @@ def get_weekly_trend_bias():
     except:
         return 0
 
-def rule_based_market_bias(sentiment_score, vix, es, spx):
-    bias = 0
+def rule_based_market_bias(sentiment_score, vix, es, spx, implied_move=None, vix_30day_avg=None):
+    bias = 0.0
     reasons = []
 
+    # Normalize sentiment to a continuous bias multiplier
     capped_sentiment = max(min(sentiment_score, 10), -10)
-    if capped_sentiment >= 3:
-        bias += 1
-        reasons.append("Moderate-to-strong positive sentiment (≥3)")
-    elif capped_sentiment <= -3:
-        bias -= 1
-        reasons.append("Strong negative sentiment (≤ -3)")
+    bias += (capped_sentiment / 5.0)  # +2.0 → +0.4
+    if abs(capped_sentiment) >= 3:
+        reasons.append(f"Moderate-to-strong sentiment ({capped_sentiment:+})")
 
-    if (es - spx) / spx > 0.0015:  # ~0.15%
-        bias += 1
-        reasons.append("ES futures significantly above SPX")
+    # ES Futures vs SPX
+    if es and spx:
+        delta = es - spx
+        pct_gap = delta / spx
+        if pct_gap > 0.0015:  # ~0.15%
+            bias += 0.5
+            reasons.append("ES futures notably above SPX")
+        elif pct_gap < -0.0015:
+            bias -= 0.5
+            reasons.append("ES futures notably below SPX")
 
+    # VIX relative to dynamic average
     if vix:
-        if vix < 18:
-            bias += 1
-            reasons.append("Low VIX (<18) - low fear")
-        elif vix > 25:
-            bias -= 1
-            reasons.append("High VIX (>25) - market fear")
+        if vix_30day_avg:
+            if vix < vix_30day_avg * 0.9:
+                bias += 0.5
+                reasons.append("VIX significantly below average (low fear)")
+            elif vix > vix_30day_avg * 1.1:
+                bias -= 0.5
+                reasons.append("VIX significantly above average (high fear)")
+        else:
+            if vix < 18:
+                bias += 0.5
+                reasons.append("VIX < 18 - low fear")
+            elif vix > 25:
+                bias -= 0.5
+                reasons.append("VIX > 25 - elevated fear")
 
-    direction = "📈 Bullish" if bias > 0 else "📉 Bearish"
-    return direction
+    # Implied move confidence adjustment
+    if implied_move is not None:
+        if implied_move < 0.2:
+            bias *= 0.5
+            reasons.append("Very low implied move - market indecision")
+        elif implied_move > 1.2:
+            bias *= 1.1
+            reasons.append("Large implied move - high conviction pricing")
+
+    # Determine direction (force binary outcome)
+    direction = "📈 Bullish" if bias >= 0 else "📉 Bearish"
+    return direction, reasons
+
 
 
 def log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move, sentiment_score, bias_label):
