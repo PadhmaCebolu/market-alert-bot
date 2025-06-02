@@ -136,36 +136,41 @@ def get_all_market_news():
 
     # CNBC (weight = 1.5)
     headlines_cnbc = scrape_headlines("https://www.cnbc.com/world/?region=world", "a.Card-title")
-    headlines_raw += [("CNBC", h) for h in headlines_cnbc]
+    headlines_raw += [{"source": "CNBC", "headline": h} for h in headlines_cnbc]
 
     # Finnhub
     try:
         res = requests.get(f"https://finnhub.io/api/v1/news?category=general&token={finnhub_api_key}")
-        res_json = res.json()
-        for item in res_json[:10] if isinstance(res_json, list) else []:
+        for item in res.json()[:10]:
             if is_market_relevant(item.get("headline", "")):
-                headlines_raw.append(("Finnhub", f"{item['headline']} - {item['url']}"))
+                headlines_raw.append({"source": "Finnhub", "headline": f"{item['headline']} - {item['url']}"})
     except Exception as e:
         print("❌ Finnhub news fetch failed:", e)
 
     # Marketaux
     try:
-        res = requests.get(f"https://api.marketaux.com/v1/news/all?symbols=SPY&filter_entities=true&language=en&api_token={marketaux_api_key}").json()
+        res = requests.get(f"https://api.marketaux.com/v1/news/all?symbols=SPY&filter_entities=true&language=en&api_token={marketaux_api_key}")
         for article in res.get("data", [])[:10]:
             if is_market_relevant(article.get("title", "")):
-                headlines_raw.append(("Marketaux", f"{article['title']} - {article['url']}"))
+                headlines_raw.append({"source": "Marketaux", "headline": f"{article['title']} - {article['url']}"})
     except Exception as e:
         print("❌ Marketaux news fetch failed:", e)
 
-    # Remove source before calling OpenAI
-    headlines_only = [text for _, text in headlines_raw]
+    # Score only the headlines
+    headlines_only = [item["headline"] for item in headlines_raw]
     scores = classify_headlines_openai_weighted(headlines_only)
 
-    # Return (source, score, headline)
-    final_news = []
-    for (src, text), score in zip(headlines_raw, scores):
-        final_news.append((src, score, text))
-        print(f"[{src}] ({score:+}) → {text}")  # Optional debug line
+    # Attach scores directly
+    for i, score in enumerate(scores):
+        headlines_raw[i]["score"] = score
+
+    # Return as list of (src, score, headline)
+    final_news = [(item["source"], item["score"], item["headline"]) for item in headlines_raw]
+
+    # Optional: print for debug
+    print("\n🧠 Final Scored Headlines:")
+    for src, score, headline in final_news:
+        print(f"[{src}] ({score:+}) → {headline}")
 
     return final_news
 
