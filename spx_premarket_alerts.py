@@ -273,24 +273,24 @@ def rule_based_market_bias(sentiment_score, vix, es, spx, implied_move=None, vix
     bias = 0.0
     reasons = []
 
-    # Normalize sentiment to a continuous bias multiplier
+    # Normalize sentiment to reduce overweighting
     capped_sentiment = max(min(sentiment_score, 10), -10)
-    bias += (capped_sentiment / 5.0)  # +2.0 → +0.4
+    bias += (capped_sentiment / 6.0)  # reduced from /5.0
     if abs(capped_sentiment) >= 3:
         reasons.append(f"Moderate-to-strong sentiment ({capped_sentiment:+})")
 
-    # ES Futures vs SPX
+    # ES Futures vs SPX (stricter threshold)
     if es and spx:
         delta = es - spx
         pct_gap = delta / spx
-        if pct_gap > 0.0015:  # ~0.15%
+        if pct_gap > 0.0025:  # previously 0.0015
             bias += 0.5
             reasons.append("ES futures notably above SPX")
-        elif pct_gap < -0.0015:
+        elif pct_gap < -0.0025:
             bias -= 0.5
             reasons.append("ES futures notably below SPX")
 
-    # VIX relative to dynamic average
+    # VIX interpretation
     if vix:
         if vix_30day_avg:
             if vix < vix_30day_avg * 0.9:
@@ -307,7 +307,7 @@ def rule_based_market_bias(sentiment_score, vix, es, spx, implied_move=None, vix
                 bias -= 0.5
                 reasons.append("VIX > 25 - elevated fear")
 
-    # Implied move confidence adjustment
+    # Implied move weight
     if implied_move is not None:
         if implied_move < 0.2:
             bias *= 0.5
@@ -316,11 +316,13 @@ def rule_based_market_bias(sentiment_score, vix, es, spx, implied_move=None, vix
             bias *= 1.1
             reasons.append("Large implied move - high conviction pricing")
 
-    # Determine direction (force binary outcome)
+    # 🧠 Contrarian pattern detection
+    if capped_sentiment > 3 and es > spx and implied_move and implied_move < 0.5:
+        bias -= 0.5
+        reasons.append("Contrarian setup: strong sentiment + low move + futures gap")
+
     direction = "📈 Bullish" if bias >= 0 else "📉 Bearish"
     return direction, reasons
-
-
 
 def log_market_features(spx, es, vix, prev_spx, prev_vix, implied_move, sentiment_score, bias_label):
     print("prev_spx:", prev_spx, "prev_vix:", prev_vix)
